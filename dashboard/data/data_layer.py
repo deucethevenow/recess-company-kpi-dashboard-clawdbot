@@ -67,8 +67,8 @@ METRIC_VERIFICATION = {
     "NRR": {"bq": True, "fn": True, "ui": True, "confirmed": False, "owner": "Andy"},
     "Supply NRR": {"bq": True, "fn": True, "ui": True, "confirmed": False, "owner": "Ashton"},
     "Pipeline Coverage": {"bq": True, "fn": True, "ui": True, "confirmed": False, "owner": "Andy"},
-    "Logo Retention": {"bq": True, "fn": True, "ui": True, "confirmed": False, "owner": "TBD"},
-    "Customer Count": {"bq": True, "fn": True, "ui": True, "confirmed": False, "owner": "TBD"},
+    "Logo Retention": {"bq": True, "fn": True, "ui": True, "confirmed": False, "owner": "TBD", "needs_review": True, "note": "Needs Review"},
+    "Customer Count": {"bq": True, "fn": True, "ui": True, "confirmed": False, "owner": "TBD", "needs_review": True, "note": "Needs Review"},
     "Time to Fulfill": {"bq": True, "fn": True, "ui": True, "confirmed": False, "owner": "Victoria"},
     "Sellable Inventory": {"bq": False, "fn": False, "ui": True, "confirmed": False, "owner": "Ian", "note": "Needs PRD"},
 }

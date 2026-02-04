@@ -1052,6 +1052,19 @@ st.markdown("""
         border-radius: 50%;
     }
 
+    .metric-live-badge.review {
+        background: #e0e7ff;
+        color: #4f46e5;
+    }
+
+    .metric-live-badge.review::before {
+        content: '';
+        width: 5px;
+        height: 5px;
+        background: #4f46e5;
+        border-radius: 50%;
+    }
+
     .metric-live-badge.mock {
         background: var(--bg-main);
         color: var(--text-muted);
@@ -1385,7 +1398,11 @@ def render_health_metrics():
         confirmed = verification.get("confirmed", False)
 
         # Build verification badge
-        if bq_ok and fn_ok:
+        needs_review = verification.get("needs_review", False)
+        if needs_review:
+            badge_class = "review"
+            badge_text = verification.get("note", "Needs Review")
+        elif bq_ok and fn_ok:
             badge_class = "live"
             badge_text = "Live"
         else:
