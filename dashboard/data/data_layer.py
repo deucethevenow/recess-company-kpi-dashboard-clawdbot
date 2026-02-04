@@ -338,8 +338,9 @@ def get_company_metrics() -> Dict[str, Any]:
         "logo_retention": actuals["logo_retention"],
         "logo_retention_target": targets.get("logo_retention_target", 0.50),
         # Time to Fulfill metrics (from contract close to 100% spend)
-        "time_to_fulfill_median": actuals.get("time_to_fulfill_median", 69),
-        "time_to_fulfill_avg": actuals.get("time_to_fulfill_avg", 156),
+        # None means no 2026 contracts fully spent yet - don't fall back to old data
+        "time_to_fulfill_median": actuals.get("time_to_fulfill_median"),
+        "time_to_fulfill_avg": actuals.get("time_to_fulfill_avg"),
         "time_to_fulfill_count": actuals.get("time_to_fulfill_count", 0),
         "time_to_fulfill_fulfilled": actuals.get("time_to_fulfill_fulfilled", 0),
         "time_to_fulfill_in_progress": actuals.get("time_to_fulfill_in_progress", 0),

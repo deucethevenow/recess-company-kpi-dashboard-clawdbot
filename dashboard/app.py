@@ -1286,13 +1286,14 @@ def render_health_metrics():
         {
             "label": "Days to Fulfill",
             "key": "Time to Fulfill",
-            "value": COMPANY_METRICS.get("time_to_fulfill_median", 69),
+            "value": COMPANY_METRICS.get("time_to_fulfill_median"),  # None if no 2026 data yet
             "target": COMPANY_METRICS.get("time_to_fulfill_target", 60),
             "ref_2025": REF_2025["time_to_fulfill"],
             "format": "days",
             "icon": "⏱️",
             "icon_class": "cyan",
             "higher_is_better": False,  # Lower days = better
+            "no_data_message": "No contracts fully spent",
         },
         {
             "label": "Logo Retention",
@@ -1337,7 +1338,7 @@ def render_health_metrics():
 
         # Format current value based on format type
         if val is None:
-            val_str = "—"
+            val_str = m.get("no_data_message", "—")
         elif fmt == "percent":
             val_str = f"{val*100:.0f}%"
         elif fmt == "multiplier":
