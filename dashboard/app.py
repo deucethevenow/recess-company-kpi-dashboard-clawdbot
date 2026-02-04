@@ -180,11 +180,33 @@ st.markdown("""
     #MainMenu, footer, header, [data-testid="stToolbar"] { display: none !important; }
     .stDeployButton { display: none !important; }
 
-    /* Sidebar Styling */
+    /* Sidebar Styling - FORCE always visible */
     [data-testid="stSidebar"] {
         background: var(--bg-sidebar);
         border-right: 1px solid var(--border-light);
         padding-top: 0;
+        /* Force sidebar to always be visible */
+        transform: none !important;
+        width: 280px !important;
+        min-width: 280px !important;
+        visibility: visible !important;
+        position: relative !important;
+        display: flex !important;
+    }
+
+    /* Override collapsed state */
+    [data-testid="stSidebar"][aria-expanded="false"] {
+        transform: none !important;
+        width: 280px !important;
+        min-width: 280px !important;
+        margin-left: 0 !important;
+        visibility: visible !important;
+    }
+
+    /* Ensure sidebar content wrapper is visible */
+    [data-testid="stSidebarContent"] {
+        display: block !important;
+        visibility: visible !important;
     }
 
     [data-testid="stSidebar"] > div:first-child {
