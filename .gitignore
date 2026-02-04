@@ -1,0 +1,65 @@
+# Environment
+.env
+.env.local
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Data exports (may contain sensitive info)
+data/*.csv
+data/exports/
+
+# Keep targets.json but ignore backups
+dashboard/data/targets.json.bak
+
+# Credentials
+credentials/
+*.credentials
+*.key
+*.pem
+*-key.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+/tmp/
+
+# Temporary files
+*.tmp
+*.temp
+temp/
+
+# Database files
+*.db
+*.sqlite
+
+# Session context (contains working state)
+context/WORKING-*.md
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Claude Code
+.claude/
+sponsor-brand-logo-cleanup/

@@ -1,0 +1,18 @@
+{
+  "project": "company-kpi-dashboard",
+  "description": "Feature tracking for KPI dashboard development",
+  "rules": {
+    "one_in_progress": "Only ONE feature can be 'in_progress' at a time",
+    "completion_gate": "Mark 'done' ONLY after verification passes"
+  },
+  "features": [
+    {
+      "id": "initial-setup",
+      "name": "Project Structure Setup",
+      "description": "Create initial project structure with context management",
+      "status": "done",
+      "created": "2025-01-22",
+      "completed": "2025-01-22"
+    }
+  ]
+}

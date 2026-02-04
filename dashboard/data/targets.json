@@ -1,0 +1,99 @@
+{
+  "company": {
+    "revenue_target": 5521390,
+    "take_rate_target": 0.50,
+    "nrr_target": 1.1,
+    "customer_count_target": 75,
+    "pipeline_target": 6.0,
+    "logo_retention_target": 0.5
+  },
+  "people": {
+    "Jack": {
+      "metric_name": "Revenue vs Target",
+      "target": 10000000,
+      "format": "currency"
+    },
+    "Deuce": {
+      "metric_name": "Take Rate %",
+      "target": 0.50,
+      "format": "percent"
+    },
+    "Ian Hong": {
+      "metric_name": "New Unique Inventory",
+      "target": 16,
+      "format": "number"
+    },
+    "Ashton": {
+      "metric_name": "NRR Top Supply Users",
+      "target": 1.1,
+      "format": "percent"
+    },
+    "Andy Cooper": {
+      "metric_name": "NRR",
+      "target": 1.1,
+      "format": "percent"
+    },
+    "Danny Sears": {
+      "metric_name": "Pipeline Coverage",
+      "target": 6.0,
+      "format": "multiplier"
+    },
+    "Katie": {
+      "metric_name": "Pipeline Coverage",
+      "target": 6.0,
+      "format": "multiplier"
+    },
+    "Char Short": {
+      "metric_name": "Contract Spend %",
+      "target": 0.95,
+      "format": "percent"
+    },
+    "Victoria": {
+      "metric_name": "Time to Fulfill",
+      "target": 30,
+      "format": "days"
+    },
+    "Claire": {
+      "metric_name": "NPS Score",
+      "target": 0.75,
+      "format": "percent"
+    },
+    "Francisco": {
+      "metric_name": "Offer Acceptance %",
+      "target": 0.9,
+      "format": "percent"
+    },
+    "Marketing": {
+      "metric_name": "Mktg-Influenced Pipeline",
+      "target": 0,
+      "format": "currency"
+    },
+    "Accounting": {
+      "metric_name": "Invoice Collection %",
+      "target": 0.95,
+      "format": "percent"
+    },
+    "VP Engineering": {
+      "metric_name": "Features Fully Scoped",
+      "target": 5,
+      "format": "number"
+    },
+    "Dev 1": {
+      "metric_name": "BizSup Completed",
+      "target": 10,
+      "format": "number"
+    },
+    "Dev 2": {
+      "metric_name": "PRDs Generated",
+      "target": 3,
+      "format": "number"
+    },
+    "Dev 3": {
+      "metric_name": "FSDs Generated",
+      "target": 2,
+      "format": "number"
+    }
+  },
+  "last_updated": "2026-02-03T09:34:24.893216",
+  "updated_by": "Admin"
+}
