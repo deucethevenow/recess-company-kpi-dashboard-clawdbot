@@ -35,7 +35,7 @@ FISCAL_YEAR = 2026
 MAX_REVENUE_TARGET = 1_000_000_000  # $1B cap
 MAX_CUSTOMER_COUNT = 10_000
 
-from data.mock_data import (
+from data.data_layer import (
     COMPANY_METRICS,
     PERSON_METRICS,
     DEPARTMENT_DETAILS,
@@ -1205,7 +1205,7 @@ def render_health_metrics():
         "supply_nrr": 0.667,     # 66.7% (2024 suppliers in 2025)
         "pipeline": None,        # N/A for prior year
         "logo_retention": 0.26,  # 26%
-        "time_to_fulfill": 14,   # 14 days median
+        "time_to_fulfill": 69,   # 69 days median (close to 100% spend)
     }
 
     # Row 1: Core financial metrics (4 cards)
@@ -1241,25 +1241,27 @@ def render_health_metrics():
             "icon_class": "orange"
         },
         {
-            "label": "Pipeline Coverage",
+            "label": "Weighted Pipeline Coverage Gap",
             "key": "Pipeline Coverage",
-            "value": COMPANY_METRICS["pipeline_coverage"],
-            "target": COMPANY_METRICS["pipeline_target"],
-            "ref_2025": REF_2025["pipeline"],
-            "format": "multiplier",
+            "value": COMPANY_METRICS.get("pipeline_weighted_coverage_gap", 0),
+            "target": 0,  # Target is 0 (no gap)
+            "ref_2025": None,
+            "format": "pipeline_gap",
             "icon": "📊",
             "icon_class": "success",
             "show_pipeline_details": True,
+            "coverage_ratio": COMPANY_METRICS.get("pipeline_coverage", 0),
+            "higher_is_better": False,  # Lower gap = better (negative = surplus)
         },
     ]
 
     # Row 2: Operational & retention metrics (4 cards)
     metrics_row2 = [
         {
-            "label": "Time to Fulfill",
+            "label": "Days to Fulfill",
             "key": "Time to Fulfill",
-            "value": COMPANY_METRICS.get("time_to_fulfill_median", 14),
-            "target": COMPANY_METRICS.get("time_to_fulfill_target", 30),
+            "value": COMPANY_METRICS.get("time_to_fulfill_median", 69),
+            "target": COMPANY_METRICS.get("time_to_fulfill_target", 60),
             "ref_2025": REF_2025["time_to_fulfill"],
             "format": "days",
             "icon": "⏱️",
@@ -1318,6 +1320,10 @@ def render_health_metrics():
             val_str = f"{int(val)} days"
         elif fmt == "number":
             val_str = f"{int(val):,}"
+        elif fmt == "pipeline_gap":
+            # Show gap amount with coverage ratio: "$4.2M (3.8x)"
+            coverage = m.get("coverage_ratio", 0)
+            val_str = f"${abs(val)/1_000_000:.1f}M ({coverage:.1f}x)"
         else:
             val_str = str(val)
 
@@ -1363,17 +1369,16 @@ def render_health_metrics():
             # Build sub-label for 2025 reference
             sub_label = f'<div style="font-size: 11px; color: #64748b; margin-top: 4px;">2025: {ref_str}</div>' if ref else ""
 
-            # Special handling for Pipeline Coverage - show goal/closed/gap
+            # Special handling for Pipeline Coverage - show weighted pipeline and needed amount
             if m.get("show_pipeline_details"):
                 goal = COMPANY_METRICS.get("pipeline_quarterly_goal", 0)
                 closed = COMPANY_METRICS.get("pipeline_closed_won", 0)
-                gap = COMPANY_METRICS.get("pipeline_gap", 0)
-                gap_label = "Surplus" if gap < 0 else "Gap"
-                gap_color = "#22c55e" if gap < 0 else "#ef4444"
+                weighted = COMPANY_METRICS.get("pipeline_weighted", 0)
+                target = COMPANY_METRICS.get("pipeline_target", 6.0)
+                needed = target * (goal - closed)
                 sub_label = f'''<div style="font-size: 11px; color: #64748b; margin-top: 8px; line-height: 1.6;">
-                    <div>Q1 Goal: <b>${goal/1_000_000:.2f}M</b></div>
-                    <div>Closed: <b>${closed/1_000_000:.2f}M</b></div>
-                    <div>{gap_label}: <span style="color: {gap_color};"><b>${abs(gap)/1_000_000:.2f}M</b></span></div>
+                    <div>Weighted Pipeline: <b>${weighted/1_000_000:.2f}M</b></div>
+                    <div>Needed for {target:.0f}x: <b>${needed/1_000_000:.2f}M</b></div>
                 </div>'''
 
             st.markdown(f'''

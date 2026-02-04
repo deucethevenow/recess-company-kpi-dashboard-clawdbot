@@ -177,9 +177,11 @@ def _get_mock_company_metrics() -> Dict[str, Any]:
         "concentration_top1_name": "HEINEKEN",
         "pipeline_coverage": 2.8,
         "logo_retention": 0.37,
-        "time_to_fulfill_median": 14,  # Median days to fulfill
-        "time_to_fulfill_avg": 139,  # Average (skewed by outliers)
-        "time_to_fulfill_count": 370,  # Number of contracts
+        "time_to_fulfill_median": 69,  # Median days from close to 100% spend
+        "time_to_fulfill_avg": 156,  # Average (skewed by outliers)
+        "time_to_fulfill_count": 226,  # Total contracts
+        "time_to_fulfill_fulfilled": 177,  # Contracts at 100% spend
+        "time_to_fulfill_in_progress": 49,  # Contracts still being fulfilled
     }
 
 
@@ -289,11 +291,13 @@ def get_company_metrics() -> Dict[str, Any]:
                 "pipeline_gap": pd.get("pipeline_gap", 0),
             }
 
-        # Time to Fulfill
+        # Time to Fulfill (from contract close to 100% spend)
         if ttf:
-            actuals["time_to_fulfill_median"] = ttf.get("median_days", 14)
-            actuals["time_to_fulfill_avg"] = ttf.get("avg_days", 139)
+            actuals["time_to_fulfill_median"] = ttf.get("median_days", 69)
+            actuals["time_to_fulfill_avg"] = ttf.get("avg_days", 156)
             actuals["time_to_fulfill_count"] = ttf.get("contract_count", 0)
+            actuals["time_to_fulfill_fulfilled"] = ttf.get("fulfilled_count", 0)
+            actuals["time_to_fulfill_in_progress"] = ttf.get("in_progress_count", 0)
     else:
         # No BigQuery data available
         if USE_BIGQUERY and _bigquery_available:
@@ -326,13 +330,20 @@ def get_company_metrics() -> Dict[str, Any]:
         "pipeline_remaining": pipeline_details["remaining_to_goal"],
         "pipeline_weighted": pipeline_details["weighted_pipeline"],
         "pipeline_gap": pipeline_details["pipeline_gap"],
+        # Weighted Pipeline Coverage Gap = (Target × Remaining) - Weighted Pipeline
+        # Positive = shortfall, Negative = surplus
+        "pipeline_weighted_coverage_gap": (
+            targets.get("pipeline_target", 6.0) * pipeline_details["remaining_to_goal"]
+        ) - pipeline_details["weighted_pipeline"],
         "logo_retention": actuals["logo_retention"],
         "logo_retention_target": targets.get("logo_retention_target", 0.50),
-        # Time to Fulfill metrics
-        "time_to_fulfill_median": actuals.get("time_to_fulfill_median", 14),
-        "time_to_fulfill_avg": actuals.get("time_to_fulfill_avg", 139),
+        # Time to Fulfill metrics (from contract close to 100% spend)
+        "time_to_fulfill_median": actuals.get("time_to_fulfill_median", 69),
+        "time_to_fulfill_avg": actuals.get("time_to_fulfill_avg", 156),
         "time_to_fulfill_count": actuals.get("time_to_fulfill_count", 0),
-        "time_to_fulfill_target": targets.get("time_to_fulfill_target", 30),
+        "time_to_fulfill_fulfilled": actuals.get("time_to_fulfill_fulfilled", 0),
+        "time_to_fulfill_in_progress": actuals.get("time_to_fulfill_in_progress", 0),
+        "time_to_fulfill_target": targets.get("time_to_fulfill_target", 60),  # Updated target based on median
     }
 
 
@@ -642,9 +653,14 @@ METRIC_DEFINITIONS = {
         "calculation": "Accepted offers / Total offers sent × 100"
     },
     "Time to Fulfill": {
-        "definition": "Days from deal close to full program spend completion.",
-        "importance": "Measures operational efficiency in program execution. Faster fulfillment improves customer satisfaction and cash flow.",
-        "calculation": "Date of full spend - Date deal closed (avg across programs)"
+        "definition": "Days from contract close date until 100% of contract value has been invoiced.",
+        "importance": "TRUE measure of fulfillment velocity - tracks financial completion, not just offer activity. Faster fulfillment improves cash flow and renewal likelihood.",
+        "calculation": "Contract close date → First invoice date where cumulative GMV invoices ≥ contract amount. Median: 69 days."
+    },
+    "Days to Fulfill": {
+        "definition": "Days from contract close date until 100% of contract value has been invoiced.",
+        "importance": "TRUE measure of fulfillment velocity - tracks financial completion, not just offer activity. Faster fulfillment improves cash flow and renewal likelihood.",
+        "calculation": "Contract close date → First invoice date where cumulative GMV invoices ≥ contract amount. Median: 69 days."
     },
     "Mktg-Influenced Pipeline": {
         "definition": "Pipeline value where marketing was a touchpoint.",
