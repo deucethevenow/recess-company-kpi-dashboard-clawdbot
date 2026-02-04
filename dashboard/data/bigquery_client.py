@@ -1109,12 +1109,13 @@ def get_time_to_fulfill() -> Dict[str, Any]:
     try:
         client = get_client()
 
-        # Try new view first
+        # Use new view with 2026 filter - return data even if median is None
+        # (None means no 2026 contracts fulfilled yet, which is valid data)
         try:
             result = list(client.query(query_new).result())
-            if result and result[0].median_days is not None:
+            if result:
                 row = result[0]
-                logger.info("Using new Days_to_Fulfill_Contract_Spend_From_Close_Date view")
+                logger.info("Using new Days_to_Fulfill_Contract_Spend_From_Close_Date view (2026 only)")
                 return {
                     "median_days": int(row.median_days) if row.median_days else None,
                     "avg_days": float(row.avg_days) if row.avg_days else None,
@@ -1125,18 +1126,18 @@ def get_time_to_fulfill() -> Dict[str, Any]:
         except Exception as e:
             logger.warning("New Time to Fulfill view not available, using legacy: %s", e)
 
-        # Fallback to legacy view
-        result = list(client.query(query_legacy).result())
-        if result:
-            row = result[0]
-            logger.info("Using legacy Days_to_Fulfill_Contract_Program view")
-            return {
-                "median_days": int(row.median_days) if row.median_days else None,
-                "avg_days": float(row.avg_days) if row.avg_days else None,
-                "contract_count": int(row.contract_count) if row.contract_count else 0,
-                "fulfilled_count": int(row.fulfilled_count) if row.fulfilled_count else 0,
-                "in_progress_count": 0,
-            }
+            # Only fallback to legacy if new view query fails (not if it returns null)
+            result = list(client.query(query_legacy).result())
+            if result:
+                row = result[0]
+                logger.info("Using legacy Days_to_Fulfill_Contract_Program view")
+                return {
+                    "median_days": int(row.median_days) if row.median_days else None,
+                    "avg_days": float(row.avg_days) if row.avg_days else None,
+                    "contract_count": int(row.contract_count) if row.contract_count else 0,
+                    "fulfilled_count": int(row.fulfilled_count) if row.fulfilled_count else 0,
+                    "in_progress_count": 0,
+                }
         return {}
     except GoogleCloudError as e:
         logger.error("Failed to fetch time to fulfill: %s", e)

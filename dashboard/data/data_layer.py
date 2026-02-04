@@ -292,9 +292,10 @@ def get_company_metrics() -> Dict[str, Any]:
             }
 
         # Time to Fulfill (from contract close to 100% spend)
+        # Note: median_days can be None if no 2026 contracts are fulfilled yet - preserve that
         if ttf:
-            actuals["time_to_fulfill_median"] = ttf.get("median_days", 69)
-            actuals["time_to_fulfill_avg"] = ttf.get("avg_days", 156)
+            actuals["time_to_fulfill_median"] = ttf.get("median_days")  # None if no fulfilled contracts
+            actuals["time_to_fulfill_avg"] = ttf.get("avg_days")  # None if no fulfilled contracts
             actuals["time_to_fulfill_count"] = ttf.get("contract_count", 0)
             actuals["time_to_fulfill_fulfilled"] = ttf.get("fulfilled_count", 0)
             actuals["time_to_fulfill_in_progress"] = ttf.get("in_progress_count", 0)
