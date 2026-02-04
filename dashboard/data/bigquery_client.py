@@ -1079,6 +1079,7 @@ def get_time_to_fulfill() -> Dict[str, Any]:
         fulfilled_count, in_progress_count
     """
     # Try new view first (measures contract close → 100% invoiced)
+    # Filter to 2026 deals only for current year performance
     query_new = f"""
     SELECT
         APPROX_QUANTILES(
@@ -1090,6 +1091,7 @@ def get_time_to_fulfill() -> Dict[str, Any]:
         COUNTIF(fulfillment_status = 'Fulfilled') as fulfilled_count,
         COUNTIF(fulfillment_status = 'In Progress') as in_progress_count
     FROM `{PROJECT_ID}.{DATASET}.Days_to_Fulfill_Contract_Spend_From_Close_Date`
+    WHERE contract_close_date >= '2026-01-01'
     """
 
     # Fallback to legacy view if new view doesn't exist
