@@ -89,16 +89,20 @@ COMPANY_HEALTH_2025 = {
         "note": "Quota from HubSpot property_x_YYYY_*_quota fields. DG and Walmart excluded from main total.",
     },
 
-    # Time to Fulfill
+    # Days to Fulfill (Contract Spend from Close Date)
+    # Measures: Closed Won Date → Days Until Contract Spend = 100% of Contract
+    # 100% = Cumulative (GMV invoices - credit memos) >= contract amount (property_amount)
     "time_to_fulfill": {
-        "value": 14,  # 14 days (median)
-        "formatted": "14 days",
+        "value": 69,  # 69 days (median) - from new view
+        "formatted": "69 days",
         "owner": "Victoria",
-        "target": None,  # Lower is better
+        "target": 60,  # Target is 60 days
         "components": {
-            "median_days": 14,
-            "avg_days": 139,
-            "contract_count": 370,
+            "median_days": 69,
+            "avg_days": 156,
+            "contract_count": 226,
+            "fulfilled_count": 177,
+            "in_progress_count": 49,
         },
     },
 

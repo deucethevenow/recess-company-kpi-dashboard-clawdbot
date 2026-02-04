@@ -1062,31 +1062,78 @@ def get_contract_spend_pct() -> Optional[float]:
 
 
 def get_time_to_fulfill() -> Dict[str, Any]:
-    """Fetch time to fulfill metrics from Days_to_Fulfill_Contract_Program.
+    """Fetch time to fulfill contract spend metrics.
 
-    Uses median as primary metric (less sensitive to outliers).
-    Also returns average for reference.
+    Uses the new view that measures days from contract close date until
+    100% of contract value has been invoiced. This is the TRUE "time to
+    fulfill" metric - measuring actual financial completion, not just
+    offer acceptance dates.
+
+    Primary metric is median (less sensitive to outliers like old contracts).
+
+    View: Days_to_Fulfill_Contract_Spend_From_Close_Date
+    Fallback: Days_to_Fulfill_Contract_Program (legacy)
 
     Returns:
-        Dictionary with median_days, avg_days, contract_count
+        Dictionary with median_days, avg_days, contract_count,
+        fulfilled_count, in_progress_count
     """
-    query = f"""
+    # Try new view first (measures contract close → 100% invoiced)
+    query_new = f"""
+    SELECT
+        APPROX_QUANTILES(
+            CASE WHEN fulfillment_status = 'Fulfilled' THEN days_close_to_fulfill END,
+            100
+        )[OFFSET(50)] as median_days,
+        AVG(CASE WHEN fulfillment_status = 'Fulfilled' THEN days_close_to_fulfill END) as avg_days,
+        COUNT(*) as contract_count,
+        COUNTIF(fulfillment_status = 'Fulfilled') as fulfilled_count,
+        COUNTIF(fulfillment_status = 'In Progress') as in_progress_count
+    FROM `{PROJECT_ID}.{DATASET}.Days_to_Fulfill_Contract_Spend_From_Close_Date`
+    """
+
+    # Fallback to legacy view if new view doesn't exist
+    query_legacy = f"""
     SELECT
         APPROX_QUANTILES(days_between_first_last, 100)[OFFSET(50)] as median_days,
         AVG(days_between_first_last) as avg_days,
-        COUNT(*) as contract_count
+        COUNT(*) as contract_count,
+        COUNT(*) as fulfilled_count,
+        0 as in_progress_count
     FROM `{PROJECT_ID}.{DATASET}.Days_to_Fulfill_Contract_Program`
     WHERE days_between_first_last IS NOT NULL
     """
+
     try:
         client = get_client()
-        result = list(client.query(query).result())
+
+        # Try new view first
+        try:
+            result = list(client.query(query_new).result())
+            if result and result[0].median_days is not None:
+                row = result[0]
+                logger.info("Using new Days_to_Fulfill_Contract_Spend_From_Close_Date view")
+                return {
+                    "median_days": int(row.median_days) if row.median_days else None,
+                    "avg_days": float(row.avg_days) if row.avg_days else None,
+                    "contract_count": int(row.contract_count) if row.contract_count else 0,
+                    "fulfilled_count": int(row.fulfilled_count) if row.fulfilled_count else 0,
+                    "in_progress_count": int(row.in_progress_count) if row.in_progress_count else 0,
+                }
+        except Exception as e:
+            logger.warning("New Time to Fulfill view not available, using legacy: %s", e)
+
+        # Fallback to legacy view
+        result = list(client.query(query_legacy).result())
         if result:
             row = result[0]
+            logger.info("Using legacy Days_to_Fulfill_Contract_Program view")
             return {
                 "median_days": int(row.median_days) if row.median_days else None,
                 "avg_days": float(row.avg_days) if row.avg_days else None,
                 "contract_count": int(row.contract_count) if row.contract_count else 0,
+                "fulfilled_count": int(row.fulfilled_count) if row.fulfilled_count else 0,
+                "in_progress_count": 0,
             }
         return {}
     except GoogleCloudError as e:

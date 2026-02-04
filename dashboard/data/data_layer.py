@@ -496,8 +496,8 @@ _PERSON_BASE_DATA = [
      "actual": 3.2, "default_target": 3.0, "format": "multiplier", "higher_is_better": True},
     {"name": "Char Short", "department": "Demand AM", "metric_name": "Contract Spend %",
      "actual": 0.89, "default_target": 0.95, "format": "percent", "higher_is_better": True},
-    {"name": "Victoria", "department": "Demand AM", "metric_name": "Time to Fulfill",
-     "actual": 26, "default_target": 30, "format": "days", "higher_is_better": False},
+    {"name": "Victoria", "department": "Demand AM", "metric_name": "Days to Fulfill",
+     "actual": 69, "default_target": 60, "format": "days", "higher_is_better": False},
     {"name": "Claire", "department": "Demand AM", "metric_name": "NPS Score",
      "actual": 0.71, "default_target": 0.75, "format": "percent", "higher_is_better": True},
     {"name": "Francisco", "department": "Demand AM", "metric_name": "Offer Acceptance %",
@@ -653,14 +653,14 @@ METRIC_DEFINITIONS = {
         "calculation": "Accepted offers / Total offers sent × 100"
     },
     "Time to Fulfill": {
-        "definition": "Days from contract close date until 100% of contract value has been invoiced.",
-        "importance": "TRUE measure of fulfillment velocity - tracks financial completion, not just offer activity. Faster fulfillment improves cash flow and renewal likelihood.",
-        "calculation": "Contract close date → First invoice date where cumulative GMV invoices ≥ contract amount. Median: 69 days."
+        "definition": "Days from Closed Won date until contract spend reaches 100% of the contract value.",
+        "importance": "TRUE measure of fulfillment velocity - tracks financial completion (invoices minus credit memos), not just offer activity. Faster fulfillment improves cash flow and renewal likelihood.",
+        "calculation": "Closed Won Date → Days until (GMV invoices - credit memos) ≥ contract amount. Median: 69 days."
     },
     "Days to Fulfill": {
-        "definition": "Days from contract close date until 100% of contract value has been invoiced.",
-        "importance": "TRUE measure of fulfillment velocity - tracks financial completion, not just offer activity. Faster fulfillment improves cash flow and renewal likelihood.",
-        "calculation": "Contract close date → First invoice date where cumulative GMV invoices ≥ contract amount. Median: 69 days."
+        "definition": "Days from Closed Won date until contract spend reaches 100% of the contract value.",
+        "importance": "TRUE measure of fulfillment velocity - tracks financial completion (invoices minus credit memos), not just offer activity. Faster fulfillment improves cash flow and renewal likelihood.",
+        "calculation": "Closed Won Date → Days until (GMV invoices - credit memos) ≥ contract amount. Median: 69 days."
     },
     "Mktg-Influenced Pipeline": {
         "definition": "Pipeline value where marketing was a touchpoint.",

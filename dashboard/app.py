@@ -759,7 +759,12 @@ st.markdown("""
             display: none !important;
         }
 
-        /* Style Streamlit's sidebar collapse button */
+        /* Hide sidebar collapse button - keep sidebar always visible */
+        [data-testid="stSidebarCollapseButton"] {
+            display: none !important;
+        }
+
+        /* Style the expand button (shown if sidebar somehow gets collapsed) */
         [data-testid="stSidebarCollapsedControl"] {
             position: fixed;
             top: 0.5rem;
@@ -783,8 +788,7 @@ st.markdown("""
         }
 
         /* Hide "Extensions" label Streamlit adds */
-        [data-testid="stSidebarCollapsedControl"] span,
-        [data-testid="stSidebarCollapseButton"] span {
+        [data-testid="stSidebarCollapsedControl"] span {
             display: none !important;
         }
 
