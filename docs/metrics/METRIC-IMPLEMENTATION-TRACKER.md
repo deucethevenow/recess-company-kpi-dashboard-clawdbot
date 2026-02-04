@@ -754,7 +754,7 @@ Churned Customers = COUNT(customers WHERE prior_year_revenue > 0 AND current_yea
 ## NEXT STEPS (PRIORITIZED)
 
 ### Immediate
-1. [x] Create BigQuery view `Days_to_Fulfill_Contract_Spend_From_Close_Date` - SQL ready, run in BQ console
+1. [x] Create BigQuery view `Days_to_Fulfill_Contract_Spend_From_Close_Date` - ✅ DEPLOYED to BigQuery
 2. [x] Update Python function for new Days to Fulfill view
 3. [ ] Wire Contract Spend % to UI
 4. [ ] Wire NPS Score to UI
@@ -782,4 +782,5 @@ Churned Customers = COUNT(customers WHERE prior_year_revenue > 0 AND current_yea
 | 2026-02-03 | Added Definition/Why It Matters/Calculation format for all metrics | Claude |
 | 2026-02-03 | Clarified spend calculation: GMV invoices - credit memos = gross spend | Claude |
 | 2026-02-03 | Updated Python function with fallback pattern, wired to UI | Claude |
+| 2026-02-03 | **DEPLOYED** BigQuery view via bq CLI - verified: 177 fulfilled, 69-day median | Claude |
 | | | |
