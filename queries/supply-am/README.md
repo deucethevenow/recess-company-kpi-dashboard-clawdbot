@@ -103,14 +103,31 @@ Dashboard metrics for supplier health:
 
 **Split Bill Handling:** Bills with `_2`, `_3`, `_4` suffixes are linked to their primary bill's supplier org using `REGEXP_REPLACE(doc_number, r'_\d+$', '')`.
 
-## P&L Reconciliation (2025)
+## P&L Reconciliation
 
-| Metric | Amount | Notes |
-|--------|--------|-------|
-| **QBO P&L Total (4200-4230)** | $4,045,628 | All payout account activity |
-| **Linked to Platform** | $4,032,340 | 99.7% of $ linked |
-| **Unlinked (Not in Platform)** | $13,288 | Included as separate row |
-| **Query Total** | $4,045,628 | **Matches P&L exactly** |
+### Query vs Recess Forecast Spreadsheet (2026-02-06)
+
+| Year | Query Result | Forecast (Organizer Fees) | Variance | Match? |
+|------|--------------|---------------------------|----------|--------|
+| 2022 | $2,349,668 | $2,570K | -$220K (~9%) | ❌ |
+| 2023 | $2,487,199 | $2,445K | +$42K (~2%) | ⚠️ |
+| 2024 | $2,663,894 | $2,661K | +$3K (<0.1%) | ✅ |
+| 2025 | $2,770,455 | $2,760K | +$10K (<0.4%) | ✅ |
+
+**Recent years (2024-2025) match closely.** Earlier years have larger variances.
+
+### Known Discrepancy Causes
+
+1. **Bill Linkage Quality**: Earlier years have lower linkage rates (2023: 83%, 2022: lower)
+2. **Vendor Credit Patterns**: Some credits may not follow standard `_credit` or `c1` suffix pattern
+3. **Account 4200**: "Event Organizer Fee" may have different historical treatment
+4. **Data Quality**: Historical data cleanup may be needed for 2022
+
+### Recommendation
+
+- **Use 2024+ data with confidence** - variance <0.5%
+- **Treat 2022-2023 as approximate** - useful for trends, not exact P&L matching
+- Future improvement: Investigate 2022 gap if historical accuracy needed
 
 ## NPR Methodology
 
