@@ -941,6 +941,16 @@ DEPARTMENT_DETAILS = {
         ],
         "note": "Requires GitHub and Asana API integration (Phase 2)"
     },
+    "Supply AM": {
+        "summary": "Supplier relationship management. Focused on NPR (Net Payout Retention) and supplier health.",
+        "metrics": [
+            {"name": "NPR (Net Payout Retention)", "value": 1.04, "target": 1.10, "format": "percent"},
+            {"name": "Active Suppliers", "value": 174, "target": None, "format": "number"},
+            {"name": "At-Risk Suppliers", "value": 18, "target": 0, "format": "number", "higher_is_better": False},
+            {"name": "Lost Suppliers", "value": 70, "target": 0, "format": "number", "higher_is_better": False},
+        ],
+        "has_core_action_tiles": True,  # Flag to render special tiles in app.py
+    },
 }
 
 # =============================================================================

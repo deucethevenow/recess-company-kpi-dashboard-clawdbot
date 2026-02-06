@@ -1973,11 +1973,12 @@ def get_core_action_state_counts(entity: str = 'supplier') -> Dict[str, Any]:
         supplier_pivot AS (
           SELECT supplier_org_name,
             SUM(CASE WHEN txn_year = 2024 THEN net_payouts ELSE 0 END) as payout_2024,
-            SUM(CASE WHEN txn_year = 2025 THEN net_payouts ELSE 0 END) as payout_2025
+            SUM(CASE WHEN txn_year = 2025 THEN net_payouts ELSE 0 END) as payout_2025,
+            SUM(net_payouts) as total_ltv
           FROM supplier_yearly_payouts GROUP BY supplier_org_name
         ),
         supplier_states AS (
-          SELECT supplier_org_name, payout_2024, payout_2025,
+          SELECT supplier_org_name, payout_2024, payout_2025, total_ltv,
             CASE
               WHEN payout_2025 > 0 AND payout_2024 > 0 THEN
                 CASE WHEN (payout_2024 - payout_2025) / NULLIF(payout_2024, 0) > 0.50 THEN 'loosing' ELSE 'active' END
@@ -1988,7 +1989,8 @@ def get_core_action_state_counts(entity: str = 'supplier') -> Dict[str, Any]:
           FROM supplier_pivot WHERE payout_2024 > 0 OR payout_2025 > 0
         )
         SELECT core_action_state, COUNT(*) as count,
-          ROUND(SUM(payout_2024), 2) as total_2024, ROUND(SUM(payout_2025), 2) as total_2025
+          ROUND(SUM(payout_2024), 2) as total_2024, ROUND(SUM(payout_2025), 2) as total_2025,
+          ROUND(SUM(total_ltv), 2) as total_ltv
         FROM supplier_states GROUP BY core_action_state
         """
     else:
@@ -2021,10 +2023,10 @@ def get_core_action_state_counts(entity: str = 'supplier') -> Dict[str, Any]:
         results = list(client.query(query).result())
 
         response = {
-            "active": {"count": 0, "total_2024": 0, "total_2025": 0},
-            "loosing": {"count": 0, "total_2024": 0, "total_2025": 0},
-            "lost": {"count": 0, "total_2024": 0, "total_2025": 0},
-            "inactive": {"count": 0, "total_2024": 0, "total_2025": 0},
+            "active": {"count": 0, "total_2024": 0, "total_2025": 0, "total_ltv": 0},
+            "loosing": {"count": 0, "total_2024": 0, "total_2025": 0, "total_ltv": 0},
+            "lost": {"count": 0, "total_2024": 0, "total_2025": 0, "total_ltv": 0},
+            "inactive": {"count": 0, "total_2024": 0, "total_2025": 0, "total_ltv": 0},
             "entity": entity,
         }
 
@@ -2034,12 +2036,15 @@ def get_core_action_state_counts(entity: str = 'supplier') -> Dict[str, Any]:
                 response[state]["count"] = int(row.count or 0)
                 response[state]["total_2024"] = float(row.total_2024 or 0)
                 response[state]["total_2025"] = float(row.total_2025 or 0)
+                # total_ltv only available for supplier entity
+                response[state]["total_ltv"] = float(getattr(row, 'total_ltv', 0) or 0)
 
         # Calculate totals
         response["total"] = {
             "count": sum(response[s]["count"] for s in ["active", "loosing", "lost", "inactive"]),
             "total_2024": sum(response[s]["total_2024"] for s in ["active", "loosing", "lost", "inactive"]),
             "total_2025": sum(response[s]["total_2025"] for s in ["active", "loosing", "lost", "inactive"]),
+            "total_ltv": sum(response[s]["total_ltv"] for s in ["active", "loosing", "lost", "inactive"]),
         }
 
         return response

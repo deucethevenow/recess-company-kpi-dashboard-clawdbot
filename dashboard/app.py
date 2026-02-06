@@ -2133,6 +2133,162 @@ def render_supply_dashboard():
     ''', unsafe_allow_html=True)
 
 
+def render_supply_am_dashboard():
+    """Render the Supply AM dashboard with Core Action State tiles showing $ at risk."""
+    from data.bigquery_client import get_core_action_state_counts, get_supply_npr
+
+    # Fetch NPR data
+    npr_data = get_supply_npr()
+    npr_current = npr_data.get("npr_pct", 0) / 100 if npr_data.get("npr_pct") else 0
+    npr_status = "success" if npr_current >= 1.10 else ("warning" if npr_current >= 0.95 else "danger")
+
+    # North Star: NPR
+    st.markdown(f'''
+    <div class="north-star-card" style="background: linear-gradient(135deg, #13bad5 0%, #0891b2 100%);">
+        <div class="north-star-label">🎯 Net Payout Retention (NPR)</div>
+        <div class="north-star-value">{npr_current:.0%}</div>
+        <div class="north-star-context">
+            2025 vs 2024 · Target: 110%
+        </div>
+    </div>
+    ''', unsafe_allow_html=True)
+
+    # Fetch Core Action State data
+    state_data = get_core_action_state_counts('supplier')
+
+    # Core Action State Tiles
+    st.markdown('<div class="section-header">Supplier Health (Core Action State)</div>', unsafe_allow_html=True)
+
+    cols = st.columns(4)
+
+    # Helper to format LTV
+    def format_ltv(amount):
+        if amount >= 1_000_000:
+            return f"${amount/1_000_000:.1f}M"
+        elif amount >= 1_000:
+            return f"${amount/1_000:.0f}K"
+        else:
+            return f"${amount:.0f}"
+
+    # Active Suppliers
+    active = state_data.get("active", {})
+    active_count = active.get("count", 0)
+    active_ltv = active.get("total_ltv", 0)
+    active_2025 = active.get("total_2025", 0)
+    with cols[0]:
+        st.markdown(f'''
+        <div class="metric-card">
+            <div class="metric-card-header">
+                <div class="metric-card-label">Active Suppliers</div>
+                <div class="metric-card-icon success">🟢</div>
+            </div>
+            <div class="metric-card-value">{active_count:,}</div>
+            <div style="font-size: 1.25rem; font-weight: 600; color: var(--success); margin: 0.25rem 0;">{format_ltv(active_ltv)} LTV</div>
+            <span class="status-badge success">${active_2025/1_000_000:.1f}M in 2025</span>
+        </div>
+        ''', unsafe_allow_html=True)
+
+    # At-Risk (Loosing) Suppliers
+    loosing = state_data.get("loosing", {})
+    loosing_count = loosing.get("count", 0)
+    loosing_ltv = loosing.get("total_ltv", 0)
+    loosing_2024 = loosing.get("total_2024", 0)  # $ at risk = what they did in 2024
+    with cols[1]:
+        st.markdown(f'''
+        <div class="metric-card">
+            <div class="metric-card-header">
+                <div class="metric-card-label">At-Risk (Loosing)</div>
+                <div class="metric-card-icon warning">🟡</div>
+            </div>
+            <div class="metric-card-value">{loosing_count:,}</div>
+            <div style="font-size: 1.25rem; font-weight: 600; color: var(--warning); margin: 0.25rem 0;">{format_ltv(loosing_ltv)} LTV</div>
+            <span class="status-badge warning">${loosing_2024/1_000:,.0f}K at risk</span>
+        </div>
+        ''', unsafe_allow_html=True)
+
+    # Lost Suppliers
+    lost = state_data.get("lost", {})
+    lost_count = lost.get("count", 0)
+    lost_ltv = lost.get("total_ltv", 0)
+    lost_2024 = lost.get("total_2024", 0)  # $ churned = what they did in 2024
+    with cols[2]:
+        st.markdown(f'''
+        <div class="metric-card">
+            <div class="metric-card-header">
+                <div class="metric-card-label">Lost Suppliers</div>
+                <div class="metric-card-icon danger">🔴</div>
+            </div>
+            <div class="metric-card-value">{lost_count:,}</div>
+            <div style="font-size: 1.25rem; font-weight: 600; color: var(--danger); margin: 0.25rem 0;">{format_ltv(lost_ltv)} LTV</div>
+            <span class="status-badge danger">${lost_2024/1_000:,.0f}K churned</span>
+        </div>
+        ''', unsafe_allow_html=True)
+
+    # Inactive Suppliers
+    inactive = state_data.get("inactive", {})
+    inactive_count = inactive.get("count", 0)
+    inactive_ltv = inactive.get("total_ltv", 0)
+    with cols[3]:
+        st.markdown(f'''
+        <div class="metric-card">
+            <div class="metric-card-header">
+                <div class="metric-card-label">Inactive</div>
+                <div class="metric-card-icon neutral">⚪</div>
+            </div>
+            <div class="metric-card-value">{inactive_count:,}</div>
+            <div style="font-size: 1.25rem; font-weight: 600; color: var(--text-muted); margin: 0.25rem 0;">{format_ltv(inactive_ltv)} LTV</div>
+            <span class="status-badge neutral">dormant</span>
+        </div>
+        ''', unsafe_allow_html=True)
+
+    # Summary row
+    total = state_data.get("total", {})
+    total_2024 = total.get("total_2024", 0)
+    total_2025 = total.get("total_2025", 0)
+    total_ltv = total.get("total_ltv", 0)
+    overall_npr = (total_2025 / total_2024 * 100) if total_2024 > 0 else 0
+
+    st.markdown(f'''
+    <div style="background: var(--bg-main); border-radius: var(--radius-md); padding: 1rem 1.5rem; margin-top: 1rem; border: 1px solid var(--border-light);">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+            <div>
+                <span style="font-weight: 600; color: var(--text-primary);">Total Suppliers:</span>
+                <span style="margin-left: 0.5rem; color: var(--text-secondary);">{total.get("count", 0):,}</span>
+            </div>
+            <div>
+                <span style="font-weight: 600; color: var(--text-primary);">Total LTV:</span>
+                <span style="margin-left: 0.5rem; color: var(--recess-cyan); font-weight: 600;">${total_ltv/1_000_000:.1f}M</span>
+            </div>
+            <div>
+                <span style="font-weight: 600; color: var(--text-primary);">2024 Payouts:</span>
+                <span style="margin-left: 0.5rem; color: var(--text-secondary);">${total_2024/1_000_000:.2f}M</span>
+            </div>
+            <div>
+                <span style="font-weight: 600; color: var(--text-primary);">2025 Payouts:</span>
+                <span style="margin-left: 0.5rem; color: var(--text-secondary);">${total_2025/1_000_000:.2f}M</span>
+            </div>
+            <div>
+                <span style="font-weight: 600; color: var(--text-primary);">Overall NPR:</span>
+                <span style="margin-left: 0.5rem; color: {'var(--success)' if overall_npr >= 100 else 'var(--danger)'}; font-weight: 600;">{overall_npr:.1f}%</span>
+            </div>
+        </div>
+    </div>
+    ''', unsafe_allow_html=True)
+
+    # Info about the states
+    st.markdown('''
+    <div style="margin-top: 1.5rem; padding: 1rem; background: var(--bg-white); border-radius: var(--radius-md); border: 1px solid var(--border-light);">
+        <div style="font-weight: 600; margin-bottom: 0.5rem; color: var(--text-primary);">Core Action State Definitions</div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem; font-size: 0.875rem; color: var(--text-secondary);">
+            <div>🟢 <strong>Active:</strong> Payouts in 2025, stable or growing</div>
+            <div>🟡 <strong>Loosing:</strong> Payouts declining >50% YoY</div>
+            <div>🔴 <strong>Lost:</strong> Had 2024 payouts, none in 2025</div>
+            <div>⚪ <strong>Inactive:</strong> No recent payout activity</div>
+        </div>
+    </div>
+    ''', unsafe_allow_html=True)
+
+
 def render_mobile_header():
     """Render a compact header for mobile devices (hidden on desktop via CSS)."""
     st.markdown(f'''
@@ -2531,6 +2687,10 @@ def main():
         # Custom Supply dashboard with capacity data
         render_page_header("Supply", "Venue/event acquisition and capacity tracking")
         render_supply_dashboard()
+    elif page == 'supply_am':
+        # Custom Supply AM dashboard with Core Action State tiles
+        render_page_header("Supply AM", "Supplier relationship management and NPR tracking")
+        render_supply_am_dashboard()
     else:
         # Department detail page
         dept_name = NAV_TO_DEPT.get(page, page)
