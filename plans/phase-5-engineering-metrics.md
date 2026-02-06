@@ -2,28 +2,139 @@
 
 > **Status:** Not Started
 > **Goal:** Engineering team accountability + remaining API-dependent metrics (GA4, email)
-> **Estimated Unique Integrations/Queries:** ~12
+> **Estimated Unique Integrations/Queries:** ~14
 > **Dependencies:** Phase 1 (Engineering PRIMARY metrics defined), Phase 4 (API integration pattern established)
 
 ---
 
 ## Scope Summary
 
-Phase 5 connects the engineering-specific toolchain (Asana, GitHub, Notion) to the dashboard and adds remaining external API metrics for Marketing (GA4, email stats). Engineering team members each have a PRIMARY metric defined in Phase 1, but the data sources are all external APIs.
+Phase 5 connects the engineering-specific toolchain (Asana, GitHub, Notion) to the dashboard and adds remaining external API metrics for Marketing (GA4, email stats). Engineering team members each have a PRIMARY metric that is Phase 1 by business priority but Phase 5 by implementation order due to external API dependencies. Phase 1 should use placeholder/manual entry for these metrics until Phase 5 is built.
 
 This phase answers: "Is the engineering team delivering on their commitments, and what does marketing's web/email funnel look like?"
 
 ---
 
-## Engineering Team Overview
+## Engineering Team PRIMARY Metrics
 
-| Person | Role | Primary Metric | Target | Data Source |
-|--------|------|---------------|:------:|-------------|
-| **Arbind** | Engineer | Features Fully Scoped | 5/mo | Asana / GitHub |
-| **Mateus** | Engineer | BizSup Completed | 10/mo | Asana (BizSup project) |
-| **Anderson** | Engineer | PRDs Generated | 3/mo | Asana / Notion |
-| **Anderson** | Engineer | FSDs Generated | 2/mo | Asana / Notion |
-| **Lucas** | Engineer | Feature Releases | TBD | GitHub |
+> **NOTE:** These are Phase 1 PRIMARY metrics by business priority but Phase 5 by implementation order (API dependency). Phase 1 should use placeholder/manual entry until Phase 5 is built.
+
+| Person | Role | Primary Metric | Target | Data Source | Why It Matters |
+|--------|------|---------------|:------:|-------------|----------------|
+| **Arbind** | Engineer | Features Fully Scoped | 5/mo | Asana / GitHub | Unscoped features = mid-sprint chaos. |
+| **Mateus** | Engineer | BizSup Completed | 10/mo | Asana (BizSup project) | Slow BizSup = frustrated sales/AM. |
+| **Anderson** | Engineer | PRDs Generated | 3/mo | Asana / Notion | No PRDs = no roadmap clarity. |
+| **Anderson** | Engineer | FSDs Generated | 2/mo | Asana / Notion | No FSDs = ambiguous implementation. |
+| **Lucas** | Engineer | Feature Releases | TBD | GitHub | Delivery velocity. |
+
+---
+
+## Engineering Team SECONDARY Metrics
+
+| Metric | Target | Data Source | Status |
+|--------|:------:|-------------|:------:|
+| Sprint Velocity | Consistent | Asana | Build |
+| Bug Count (Open) | <10 | GitHub Issues API | Build |
+| Deploy Frequency | 3+/week | GitHub Actions API | Build |
+| Tech Debt Tickets | - | Asana / GitHub | Build |
+| Incidents (MTD) | 0 | PagerDuty / Manual | Define |
+
+---
+
+## Batch Structure
+
+### Batch A: Asana API (Highest Impact)
+
+> Blocks 3 of 4 engineers' PRIMARY metrics. Build `asana_client.py` + 6 query files.
+
+**Metrics delivered:**
+
+| # | Metric | Person | Type | Target |
+|---|--------|--------|------|:------:|
+| 1 | Features Fully Scoped | Arbind | PRIMARY | 5/mo |
+| 2 | BizSup Completed | Mateus | PRIMARY | 10/mo |
+| 3 | PRDs Generated | Anderson | PRIMARY | 3/mo |
+| 4 | FSDs Generated | Anderson | PRIMARY | 2/mo |
+| 5 | Sprint Velocity | Team | SECONDARY | Consistent |
+| 6 | Tech Debt Tickets | Team | SECONDARY | - |
+
+**Files to create:**
+- `integrations/asana_client.py`
+- `queries/engineering/features-scoped.py` (Arbind)
+- `queries/engineering/bizsup-completed.py` (Mateus)
+- `queries/engineering/prds-generated.py` (Anderson)
+- `queries/engineering/fsds-generated.py` (Anderson)
+- `queries/engineering/sprint-velocity.py` (Team)
+- `queries/engineering/tech-debt-tickets.py` (Team)
+
+**Env:** `ASANA_API_KEY`, `ASANA_WORKSPACE_ID`
+
+---
+
+### Batch B: GitHub API
+
+> Blocks Lucas's PRIMARY metric. Build `github_client.py` + 3 query files.
+
+**Metrics delivered:**
+
+| # | Metric | Person | Type | Target |
+|---|--------|--------|------|:------:|
+| 1 | Feature Releases | Lucas | PRIMARY | TBD |
+| 2 | Bug Count (Open) | Team | SECONDARY | <10 |
+| 3 | Deploy Frequency | Team | SECONDARY | 3+/week |
+
+**Files to create:**
+- `integrations/github_client.py`
+- `queries/engineering/feature-releases.py` (Lucas)
+- `queries/engineering/bug-count-open.py` (Team)
+- `queries/engineering/deploy-frequency.py` (Team)
+
+**Env:** `GITHUB_TOKEN`, `GITHUB_ORG`, `GITHUB_REPOS`
+
+---
+
+### Batch C: Notion API (If Needed)
+
+> Only if Notion is primary source for PRDs/FSDs. May be skipped if Asana handles it.
+
+**Metrics delivered:**
+
+| # | Metric | Person | Type | Target |
+|---|--------|--------|------|:------:|
+| 1 | PRDs in Notion | Anderson | PRIMARY (alt source) | 3/mo |
+| 2 | FSDs in Notion | Anderson | PRIMARY (alt source) | 2/mo |
+
+**Note:** Anderson's PRD/FSD metrics may come from Asana OR Notion depending on where the team tracks them. Determine primary source before building both. If both are used, deduplication logic is required.
+
+**Files to create (if needed):**
+- `integrations/notion_client.py`
+- `queries/engineering/prds-notion.py`
+- `queries/engineering/fsds-notion.py`
+
+**Env:** `NOTION_API_KEY`, `NOTION_PRD_DB_ID`, `NOTION_FSD_DB_ID`
+
+---
+
+### Batch D: GA4 + HubSpot Email (Marketing)
+
+> Low priority. Website traffic and email stats for Marketing tab.
+
+**Metrics delivered:**
+
+| # | Metric | Department | Type | Target |
+|---|--------|-----------|------|:------:|
+| 1 | Website Traffic | Marketing | SECONDARY | - |
+| 2 | Content Engagement | Marketing | SECONDARY | - |
+| 3 | Email Open Rate | Marketing | SECONDARY | 25% |
+
+**Files to create:**
+- `integrations/ga4_client.py`
+- `queries/marketing/website-traffic.py`
+- `queries/marketing/content-engagement.py`
+- `queries/marketing/email-open-rate.py`
+
+**Env (GA4):** `GA4_PROPERTY_ID` (may reuse existing BigQuery service account)
+**Env (HubSpot Email):** Existing HubSpot private app token (portal 6699636) -- may piggyback on Phase 4 HubSpot deep integration
 
 ---
 
@@ -31,6 +142,7 @@ This phase answers: "Is the engineering team delivering on their commitments, an
 
 > **Priority:** HIGH (blocks 3 of 4 engineers' PRIMARY metrics)
 > **Current Status:** Not Started
+> **Batch:** A
 
 ### Metrics Powered by Asana
 
@@ -75,6 +187,7 @@ This phase answers: "Is the engineering team delivering on their commitments, an
 
 > **Priority:** HIGH (blocks Lucas's PRIMARY metric)
 > **Current Status:** Not Started
+> **Batch:** B
 
 ### Metrics Powered by GitHub
 
@@ -113,6 +226,7 @@ This phase answers: "Is the engineering team delivering on their commitments, an
 
 > **Priority:** MEDIUM (supplementary to Asana for PRDs/FSDs)
 > **Current Status:** Not Started
+> **Batch:** C (may be skipped)
 
 ### Metrics Powered by Notion
 
@@ -152,6 +266,7 @@ This phase answers: "Is the engineering team delivering on their commitments, an
 > **Priority:** LOW
 > **Current Status:** Not Started
 > **Department:** Marketing
+> **Batch:** D
 
 ### Metrics Powered by GA4
 
@@ -188,6 +303,7 @@ This phase answers: "Is the engineering team delivering on their commitments, an
 
 > **Priority:** LOW
 > **Department:** Marketing
+> **Batch:** D
 
 ### Metrics Powered by HubSpot Email
 
@@ -225,18 +341,18 @@ This phase answers: "Is the engineering team delivering on their commitments, an
 
 ## Complete Engineering Dashboard Layout
 
-| Card | Person | Data Source | Phase |
+| Card | Person | Data Source | Batch |
 |------|--------|-------------|:-----:|
-| Features Fully Scoped | Arbind | Asana | 5 |
-| BizSup Completed | Mateus | Asana | 5 |
-| PRDs Generated | Anderson | Asana / Notion | 5 |
-| FSDs Generated | Anderson | Asana / Notion | 5 |
-| Feature Releases | Lucas | GitHub | 5 |
-| Sprint Velocity | Team | Asana | 5 |
-| Bug Count (Open) | Team | GitHub | 5 |
-| Deploy Frequency | Team | GitHub | 5 |
-| Incidents (MTD) | Team | Manual/PagerDuty | 5 |
-| Tech Debt Tickets | Team | Asana/GitHub | 5 |
+| Features Fully Scoped | Arbind | Asana | A |
+| BizSup Completed | Mateus | Asana | A |
+| PRDs Generated | Anderson | Asana / Notion | A / C |
+| FSDs Generated | Anderson | Asana / Notion | A / C |
+| Feature Releases | Lucas | GitHub | B |
+| Sprint Velocity | Team | Asana | A |
+| Bug Count (Open) | Team | GitHub | B |
+| Deploy Frequency | Team | GitHub | B |
+| Incidents (MTD) | Team | Manual/PagerDuty | -- |
+| Tech Debt Tickets | Team | Asana/GitHub | A |
 
 ---
 
@@ -245,7 +361,7 @@ This phase answers: "Is the engineering team delivering on their commitments, an
 | Dependency | Phase | Impact |
 |------------|:-----:|--------|
 | Dashboard framework running | 1 | Engineering tab must exist |
-| Engineering PRIMARY metrics defined | 1 | Targets and owners confirmed |
+| Engineering PRIMARY metrics defined | 1 | Targets and owners confirmed; Phase 1 uses placeholder/manual entry |
 | API integration pattern | 4 | Reuse integration architecture from Phase 4 |
 | HubSpot deep integration | 4 | Email stats may piggyback on Phase 4 HubSpot work |
 
@@ -259,26 +375,27 @@ Phase 5 is **done** when:
 - [ ] Mateus's "BizSup Completed" metric displays live Asana data
 - [ ] Anderson's "PRDs Generated" and "FSDs Generated" display live data
 - [ ] Lucas's "Feature Releases" metric displays live GitHub data
-- [ ] Team metrics (Sprint Velocity, Bug Count, Deploy Frequency) are live
+- [ ] Team metrics (Sprint Velocity, Bug Count, Deploy Frequency, Tech Debt Tickets) are live
 - [ ] Marketing website traffic from GA4 displays on Marketing tab
 - [ ] Marketing email open rate displays on Marketing tab
 - [ ] All integrations have error handling and fallback displays
 - [ ] All API credentials stored securely in environment variables
 - [ ] Daily refresh schedule includes all new API calls
 - [ ] Engineering tab respects role-based access control
+- [ ] Phase 1 placeholder/manual entry for Engineering PRIMARY metrics is replaced with live data
 
 ---
 
 ## Estimated Integration Count
 
-| Integration | API Calls/Day | New Queries | Display Cards |
-|-------------|:------------:|:-----------:|:-------------:|
-| Asana | 5-10 | 6 | 6 |
-| GitHub | 3-5 | 3 | 3 |
-| Notion | 2-3 | 2 | 2 (may merge with Asana) |
-| GA4 | 1-2 | 2 | 2 |
-| HubSpot Email | 1 | 1 | 1 |
-| **Phase 5 Total** | **~15** | **~12** | **~14** |
+| Integration | Batch | API Calls/Day | New Queries | Display Cards |
+|-------------|:-----:|:------------:|:-----------:|:-------------:|
+| Asana | A | 5-10 | 6 | 6 |
+| GitHub | B | 3-5 | 3 | 3 |
+| Notion | C | 2-3 | 2 | 2 (may merge with Asana) |
+| GA4 | D | 1-2 | 2 | 2 |
+| HubSpot Email | D | 1 | 1 | 1 |
+| **Phase 5 Total** | | **~15** | **~14** | **~14** |
 
 ---
 

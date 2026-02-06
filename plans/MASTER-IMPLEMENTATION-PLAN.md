@@ -900,8 +900,8 @@ Credentials: ~/.config/bigquery-mcp-key.json
 
 | Source | Purpose | Integration | Department |
 |--------|---------|-------------|------------|
-| **Smart Lead API** | Lead queue runway, sequences, send capacity | Phase 2 | Supply |
-| SimpleFin API | Cash balance | Phase 2 | CEO/COO |
+| **Smart Lead API** | Lead queue runway, sequences, send capacity | Phase 4 | Supply |
+| SimpleFin API | Cash balance | Phase 4 | CEO/COO |
 | Bill.com API | Bills status, vendor onboarding | Phase 4 | Accounting |
 | Zendesk/Intercom | Ticket response times | Phase 4 | Supply AM |
 | Asana API | Engineering tasks, BizSup | Phase 5 | Engineering |
