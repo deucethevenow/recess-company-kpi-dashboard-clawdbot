@@ -547,34 +547,113 @@ def get_demand_nrr_details(fiscal_year: int = FISCAL_YEAR) -> Dict[str, Any]:
 
 
 def get_supply_nrr(fiscal_year: int = FISCAL_YEAR) -> Optional[float]:
-    """Fetch Supply Net Revenue Retention from Supplier_Metrics view.
+    """Fetch Supply Net Revenue Retention using financial-based calculation.
 
-    Formula: Payouts to prior year suppliers in current year / Their prior year payouts
+    Uses QBO bill transaction dates (when money moved) instead of offer acceptance dates.
+    This is more accurate because:
+    - Uses actual financial transaction dates
+    - Includes vendor credits (refunds, adjustments)
+    - Handles split bills (_2, _3 suffixes) properly
+    - Links QBO bills to MongoDB remittances for supplier org attribution
 
-    Example for 2026:
-    - Suppliers who had payouts in 2025
-    - Their 2026 payouts / Their 2025 payouts
+    Formula: (Current Year Net Payouts to Prior Year Suppliers) / (Prior Year Net Payouts)
+    Net Payouts = Bills - Vendor Credits
+
+    Target: 110%
 
     Returns:
-        Supply NRR as decimal (e.g., 0.67 for 67%) or None if query fails
+        Supply NRR as decimal (e.g., 0.87 for 87%) or None if query fails
     """
     prior_year = fiscal_year - 1
 
     query = f"""
-    WITH supplier_yearly AS (
+    -- Financial-based Supply NRR using QBO bills linked to MongoDB remittances
+    WITH payout_accounts AS (
+        SELECT id as account_id
+        FROM `{PROJECT_ID}.src_fivetran_qbo.account`
+        WHERE _fivetran_deleted = FALSE
+          AND account_number IN ('4200', '4210', '4220', '4230')
+    ),
+    remittance_supplier_map AS (
+        SELECT DISTINCT
+            rli.bill_number,
+            rli.ctx.supplier.org.name as supplier_org_name
+        FROM `{PROJECT_ID}.mongodb.remittance_line_items` rli
+        WHERE rli.bill_number IS NOT NULL
+          AND rli.ctx.supplier.org.name IS NOT NULL
+    ),
+    qbo_payout_bills AS (
         SELECT
-            Supplier_Name,
-            SUM(CASE WHEN Offer_Accepted_Year = {prior_year} THEN Payouts ELSE 0 END) as payouts_prior,
-            SUM(CASE WHEN Offer_Accepted_Year = {fiscal_year} THEN Payouts ELSE 0 END) as payouts_current
-        FROM `{PROJECT_ID}.{DATASET}.Supplier_Metrics`
-        GROUP BY Supplier_Name
+            b.doc_number as bill_number,
+            REGEXP_REPLACE(b.doc_number, r'_\\d+$', '') as base_bill_number,
+            EXTRACT(YEAR FROM b.transaction_date) as txn_year,
+            SUM(CAST(bl.amount AS FLOAT64)) as bill_amount
+        FROM `{PROJECT_ID}.src_fivetran_qbo.bill` b
+        JOIN `{PROJECT_ID}.src_fivetran_qbo.bill_line` bl ON b.id = bl.bill_id
+        JOIN payout_accounts pa ON bl.account_expense_account_id = pa.account_id
+        WHERE b._fivetran_deleted = FALSE
+          AND EXTRACT(YEAR FROM b.transaction_date) >= {prior_year}
+        GROUP BY b.doc_number, b.transaction_date
+    ),
+    qbo_payout_credits AS (
+        SELECT
+            REGEXP_REPLACE(vc.doc_number, r'(_credit|c\\d+)$', '') as bill_number,
+            EXTRACT(YEAR FROM vc.transaction_date) as credit_year,
+            SUM(CAST(vcl.amount AS FLOAT64)) as credit_amount
+        FROM `{PROJECT_ID}.src_fivetran_qbo.vendor_credit` vc
+        JOIN `{PROJECT_ID}.src_fivetran_qbo.vendor_credit_line` vcl ON vc.id = vcl.vendor_credit_id
+        JOIN payout_accounts pa ON vcl.account_expense_account_id = pa.account_id
+        WHERE vc._fivetran_deleted = FALSE
+          AND REGEXP_CONTAINS(vc.doc_number, r'(_credit|c\\d+)$')
+          AND EXTRACT(YEAR FROM vc.transaction_date) >= {prior_year}
+        GROUP BY vc.doc_number, vc.transaction_date
+    ),
+    bills_with_supplier AS (
+        SELECT
+            COALESCE(rsm.supplier_org_name, 'UNLINKED') as supplier_org_name,
+            b.txn_year,
+            b.bill_amount,
+            0.0 as credit_amount
+        FROM qbo_payout_bills b
+        LEFT JOIN remittance_supplier_map rsm ON b.base_bill_number = rsm.bill_number
+    ),
+    credits_with_supplier AS (
+        SELECT
+            COALESCE(rsm.supplier_org_name, 'UNLINKED') as supplier_org_name,
+            c.credit_year as txn_year,
+            0.0 as bill_amount,
+            c.credit_amount
+        FROM qbo_payout_credits c
+        LEFT JOIN remittance_supplier_map rsm ON c.bill_number = rsm.bill_number
+    ),
+    all_transactions AS (
+        SELECT * FROM bills_with_supplier
+        UNION ALL
+        SELECT * FROM credits_with_supplier
+    ),
+    supplier_yearly_revenue AS (
+        SELECT
+            supplier_org_name,
+            txn_year,
+            SUM(bill_amount) - SUM(credit_amount) as net_revenue
+        FROM all_transactions
+        WHERE supplier_org_name != 'UNLINKED'
+        GROUP BY supplier_org_name, txn_year
+    ),
+    supplier_pivot AS (
+        SELECT
+            supplier_org_name,
+            SUM(CASE WHEN txn_year = {prior_year} THEN net_revenue ELSE 0 END) as rev_prior,
+            SUM(CASE WHEN txn_year = {fiscal_year} THEN net_revenue ELSE 0 END) as rev_current
+        FROM supplier_yearly_revenue
+        GROUP BY supplier_org_name
     )
     SELECT
         SAFE_DIVIDE(
-            SUM(CASE WHEN payouts_prior > 0 THEN payouts_current END),
-            SUM(CASE WHEN payouts_prior > 0 THEN payouts_prior END)
+            SUM(CASE WHEN rev_prior > 0 THEN rev_current END),
+            SUM(CASE WHEN rev_prior > 0 THEN rev_prior END)
         ) as supply_nrr
-    FROM supplier_yearly
+    FROM supplier_pivot
     """
     try:
         client = get_client()
@@ -588,11 +667,16 @@ def get_supply_nrr(fiscal_year: int = FISCAL_YEAR) -> Optional[float]:
 
 
 def get_supply_nrr_details(fiscal_year: int = FISCAL_YEAR) -> Dict[str, Any]:
-    """Fetch detailed Supply NRR with both current year and prior year comparison.
+    """Fetch detailed Supply NRR using financial-based calculation.
+
+    Uses QBO bill transaction dates linked to MongoDB remittances for accurate
+    supplier org attribution. Includes vendor credits and handles split bills.
 
     Returns dict with:
-    - current_year: 2026 YTD data (2025 suppliers' 2026 payouts vs their 2025 payouts)
-    - prior_year: 2025 Actuals (2024 suppliers' 2025 payouts vs their 2024 payouts)
+    - current_year: 2026 YTD data (2025 suppliers' 2026 net payouts vs their 2025 net payouts)
+    - prior_year: 2025 Actuals (2024 suppliers' 2025 net payouts vs their 2024 net payouts)
+
+    Net Payouts = Bills - Vendor Credits (both attributed by transaction_date)
 
     Returns:
         Dictionary with Supply NRR details for both periods
@@ -601,25 +685,98 @@ def get_supply_nrr_details(fiscal_year: int = FISCAL_YEAR) -> Dict[str, Any]:
     prior_prior_year = fiscal_year - 2
 
     query = f"""
-    WITH supplier_yearly AS (
+    -- Financial-based Supply NRR details using QBO bills linked to MongoDB remittances
+    WITH payout_accounts AS (
+        SELECT id as account_id
+        FROM `{PROJECT_ID}.src_fivetran_qbo.account`
+        WHERE _fivetran_deleted = FALSE
+          AND account_number IN ('4200', '4210', '4220', '4230')
+    ),
+    remittance_supplier_map AS (
+        SELECT DISTINCT
+            rli.bill_number,
+            rli.ctx.supplier.org.name as supplier_org_name
+        FROM `{PROJECT_ID}.mongodb.remittance_line_items` rli
+        WHERE rli.bill_number IS NOT NULL
+          AND rli.ctx.supplier.org.name IS NOT NULL
+    ),
+    qbo_payout_bills AS (
         SELECT
-            Supplier_Name,
-            SUM(CASE WHEN Offer_Accepted_Year = {prior_prior_year} THEN Payouts ELSE 0 END) as payouts_{prior_prior_year},
-            SUM(CASE WHEN Offer_Accepted_Year = {prior_year} THEN Payouts ELSE 0 END) as payouts_{prior_year},
-            SUM(CASE WHEN Offer_Accepted_Year = {fiscal_year} THEN Payouts ELSE 0 END) as payouts_{fiscal_year}
-        FROM `{PROJECT_ID}.{DATASET}.Supplier_Metrics`
-        GROUP BY Supplier_Name
+            b.doc_number as bill_number,
+            REGEXP_REPLACE(b.doc_number, r'_\\d+$', '') as base_bill_number,
+            EXTRACT(YEAR FROM b.transaction_date) as txn_year,
+            SUM(CAST(bl.amount AS FLOAT64)) as bill_amount
+        FROM `{PROJECT_ID}.src_fivetran_qbo.bill` b
+        JOIN `{PROJECT_ID}.src_fivetran_qbo.bill_line` bl ON b.id = bl.bill_id
+        JOIN payout_accounts pa ON bl.account_expense_account_id = pa.account_id
+        WHERE b._fivetran_deleted = FALSE
+          AND EXTRACT(YEAR FROM b.transaction_date) >= {prior_prior_year}
+        GROUP BY b.doc_number, b.transaction_date
+    ),
+    qbo_payout_credits AS (
+        SELECT
+            REGEXP_REPLACE(vc.doc_number, r'(_credit|c\\d+)$', '') as bill_number,
+            EXTRACT(YEAR FROM vc.transaction_date) as credit_year,
+            SUM(CAST(vcl.amount AS FLOAT64)) as credit_amount
+        FROM `{PROJECT_ID}.src_fivetran_qbo.vendor_credit` vc
+        JOIN `{PROJECT_ID}.src_fivetran_qbo.vendor_credit_line` vcl ON vc.id = vcl.vendor_credit_id
+        JOIN payout_accounts pa ON vcl.account_expense_account_id = pa.account_id
+        WHERE vc._fivetran_deleted = FALSE
+          AND REGEXP_CONTAINS(vc.doc_number, r'(_credit|c\\d+)$')
+          AND EXTRACT(YEAR FROM vc.transaction_date) >= {prior_prior_year}
+        GROUP BY vc.doc_number, vc.transaction_date
+    ),
+    bills_with_supplier AS (
+        SELECT
+            COALESCE(rsm.supplier_org_name, 'UNLINKED') as supplier_org_name,
+            b.txn_year,
+            b.bill_amount,
+            0.0 as credit_amount
+        FROM qbo_payout_bills b
+        LEFT JOIN remittance_supplier_map rsm ON b.base_bill_number = rsm.bill_number
+    ),
+    credits_with_supplier AS (
+        SELECT
+            COALESCE(rsm.supplier_org_name, 'UNLINKED') as supplier_org_name,
+            c.credit_year as txn_year,
+            0.0 as bill_amount,
+            c.credit_amount
+        FROM qbo_payout_credits c
+        LEFT JOIN remittance_supplier_map rsm ON c.bill_number = rsm.bill_number
+    ),
+    all_transactions AS (
+        SELECT * FROM bills_with_supplier
+        UNION ALL
+        SELECT * FROM credits_with_supplier
+    ),
+    supplier_yearly_revenue AS (
+        SELECT
+            supplier_org_name,
+            txn_year,
+            SUM(bill_amount) - SUM(credit_amount) as net_revenue
+        FROM all_transactions
+        WHERE supplier_org_name != 'UNLINKED'
+        GROUP BY supplier_org_name, txn_year
+    ),
+    supplier_pivot AS (
+        SELECT
+            supplier_org_name,
+            SUM(CASE WHEN txn_year = {prior_prior_year} THEN net_revenue ELSE 0 END) as rev_prior_prior,
+            SUM(CASE WHEN txn_year = {prior_year} THEN net_revenue ELSE 0 END) as rev_prior,
+            SUM(CASE WHEN txn_year = {fiscal_year} THEN net_revenue ELSE 0 END) as rev_current
+        FROM supplier_yearly_revenue
+        GROUP BY supplier_org_name
     )
     SELECT
         -- 2024 cohort in 2025 (prior complete year comparison)
-        SUM(CASE WHEN payouts_{prior_prior_year} > 0 THEN payouts_{prior_prior_year} END) as prior_cohort_original,
-        SUM(CASE WHEN payouts_{prior_prior_year} > 0 THEN payouts_{prior_year} END) as prior_cohort_next_year,
-        COUNT(CASE WHEN payouts_{prior_prior_year} > 0 THEN 1 END) as prior_cohort_count,
+        SUM(CASE WHEN rev_prior_prior > 0 THEN rev_prior_prior END) as prior_cohort_original,
+        SUM(CASE WHEN rev_prior_prior > 0 THEN rev_prior END) as prior_cohort_next_year,
+        COUNT(CASE WHEN rev_prior_prior > 0 THEN 1 END) as prior_cohort_count,
         -- 2025 cohort in 2026 (current year)
-        SUM(CASE WHEN payouts_{prior_year} > 0 THEN payouts_{prior_year} END) as current_cohort_original,
-        SUM(CASE WHEN payouts_{prior_year} > 0 THEN payouts_{fiscal_year} END) as current_cohort_next_year,
-        COUNT(CASE WHEN payouts_{prior_year} > 0 THEN 1 END) as current_cohort_count
-    FROM supplier_yearly
+        SUM(CASE WHEN rev_prior > 0 THEN rev_prior END) as current_cohort_original,
+        SUM(CASE WHEN rev_prior > 0 THEN rev_current END) as current_cohort_next_year,
+        COUNT(CASE WHEN rev_prior > 0 THEN 1 END) as current_cohort_count
+    FROM supplier_pivot
     """
     try:
         client = get_client()
@@ -650,7 +807,8 @@ def get_supply_nrr_details(fiscal_year: int = FISCAL_YEAR) -> Dict[str, Any]:
                 "supplier_count": int(row.prior_cohort_count or 0),
                 "nrr_pct": (prior_next / prior_orig * 100) if prior_orig > 0 else 0,
                 "label": f"{prior_year} Actuals"
-            }
+            },
+            "methodology": "financial"  # Indicates this uses QBO transaction dates
         }
     except GoogleCloudError as e:
         logger.error("Failed to fetch supply NRR details: %s", e)

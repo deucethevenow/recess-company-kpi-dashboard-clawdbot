@@ -8,12 +8,12 @@
 -- - Links QBO bills to MongoDB remittances via bill_number for proper supplier org attribution
 -- - Handles WeWork-style scenarios: 200+ QBO vendor accounts → 1 supplier org in MongoDB
 -- - Includes vendor credits (adjustments, refunds) properly attributed to base bill
+-- - Handles split bills (_2, _3 suffix) by linking to primary bill's supplier
 --
--- Linkage Quality (as of 2026-02-05):
--- - 2026: 100% linkage (39/39)
--- - 2025: 98.8% linkage (4,856/4,917)
--- - 2024: 81.3% linkage (3,537/4,351)
--- - 2023: 64.8% linkage (3,797/5,864)
+-- Linkage Quality (as of 2026-02-05, after split bill handling):
+-- - 2026: ~100% linkage
+-- - 2025: ~99.6% linkage (after split bill fix)
+-- - 2024: ~98% linkage (after split bill fix)
 -- - Earlier years have lower linkage rates
 --
 -- NRR Formula: (Current Year Revenue from Prior Year Suppliers) / (Prior Year Revenue) * 100
@@ -43,9 +43,12 @@ remittance_supplier_map AS (
 ),
 
 -- Step 3: Get QBO bills in payout accounts with transaction dates
+-- Strip _2, _3, _4 suffixes to get base bill number for linking split bills to primary
 qbo_payout_bills AS (
   SELECT
     b.doc_number as bill_number,
+    -- Extract base bill number by removing _2, _3, _4 etc. suffixes
+    REGEXP_REPLACE(b.doc_number, r'_\d+$', '') as base_bill_number,
     b.transaction_date,
     EXTRACT(YEAR FROM b.transaction_date) as txn_year,
     SUM(CAST(bl.amount AS FLOAT64)) as bill_amount
@@ -80,6 +83,7 @@ qbo_payout_credits AS (
 ),
 
 -- Step 5: Combine bills with supplier attribution
+-- Use base_bill_number for joining so split bills (_2, _3) link to primary's supplier
 bills_with_supplier AS (
   SELECT
     COALESCE(rsm.supplier_org_name, 'UNLINKED') as supplier_org_name,
@@ -88,7 +92,7 @@ bills_with_supplier AS (
     0.0 as credit_amount
   FROM qbo_payout_bills b
   LEFT JOIN remittance_supplier_map rsm
-    ON b.bill_number = rsm.bill_number
+    ON b.base_bill_number = rsm.bill_number  -- Use base bill for split bill linking
 ),
 
 -- Step 6: Combine credits with supplier attribution (via linked bill)
