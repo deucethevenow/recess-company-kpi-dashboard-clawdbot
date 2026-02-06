@@ -546,8 +546,12 @@ def get_demand_nrr_details(fiscal_year: int = FISCAL_YEAR) -> Dict[str, Any]:
         return {}
 
 
-def get_supply_nrr(fiscal_year: int = FISCAL_YEAR) -> Optional[float]:
-    """Fetch Supply Net Revenue Retention using financial-based calculation.
+def get_supply_npr(fiscal_year: int = FISCAL_YEAR) -> Optional[float]:
+    """Fetch Supply Net Payout Retention (NPR) using financial-based calculation.
+
+    NOTE: Renamed from get_supply_nrr to get_supply_npr to clarify terminology:
+    - NPR (Net Payout Retention) = Suppliers - did they get paid more?
+    - NRR (Net Revenue Retention) = Customers - did they spend more?
 
     Uses QBO bill transaction dates (when money moved) instead of offer acceptance dates.
     This is more accurate because:
@@ -562,7 +566,7 @@ def get_supply_nrr(fiscal_year: int = FISCAL_YEAR) -> Optional[float]:
     Target: 110%
 
     Returns:
-        Supply NRR as decimal (e.g., 0.87 for 87%) or None if query fails
+        Supply NPR as decimal (e.g., 0.87 for 87%) or None if query fails
     """
     prior_year = fiscal_year - 1
 
@@ -662,12 +666,18 @@ def get_supply_nrr(fiscal_year: int = FISCAL_YEAR) -> Optional[float]:
             return float(result[0].supply_nrr)
         return None
     except GoogleCloudError as e:
-        logger.error("Failed to fetch supply NRR: %s", e)
+        logger.error("Failed to fetch supply NPR: %s", e)
         return None
 
 
-def get_supply_nrr_details(fiscal_year: int = FISCAL_YEAR) -> Dict[str, Any]:
-    """Fetch detailed Supply NRR using financial-based calculation.
+# Alias for backward compatibility
+def get_supply_nrr(fiscal_year: int = FISCAL_YEAR) -> Optional[float]:
+    """Deprecated: Use get_supply_npr() instead. Kept for backward compatibility."""
+    return get_supply_npr(fiscal_year)
+
+
+def get_supply_npr_details(fiscal_year: int = FISCAL_YEAR) -> Dict[str, Any]:
+    """Fetch detailed Supply NPR using financial-based calculation.
 
     Uses QBO bill transaction dates linked to MongoDB remittances for accurate
     supplier org attribution. Includes vendor credits and handles split bills.
@@ -679,7 +689,7 @@ def get_supply_nrr_details(fiscal_year: int = FISCAL_YEAR) -> Dict[str, Any]:
     Net Payouts = Bills - Vendor Credits (both attributed by transaction_date)
 
     Returns:
-        Dictionary with Supply NRR details for both periods
+        Dictionary with Supply NPR details for both periods
     """
     prior_year = fiscal_year - 1
     prior_prior_year = fiscal_year - 2
@@ -797,7 +807,7 @@ def get_supply_nrr_details(fiscal_year: int = FISCAL_YEAR) -> Dict[str, Any]:
                 "cohort_original_payouts": curr_orig,
                 "cohort_next_year_payouts": curr_next,
                 "supplier_count": int(row.current_cohort_count or 0),
-                "nrr_pct": (curr_next / curr_orig * 100) if curr_orig > 0 else 0,
+                "npr_pct": (curr_next / curr_orig * 100) if curr_orig > 0 else 0,
                 "label": f"{fiscal_year} YTD"
             },
             "prior_year": {
@@ -805,14 +815,20 @@ def get_supply_nrr_details(fiscal_year: int = FISCAL_YEAR) -> Dict[str, Any]:
                 "cohort_original_payouts": prior_orig,
                 "cohort_next_year_payouts": prior_next,
                 "supplier_count": int(row.prior_cohort_count or 0),
-                "nrr_pct": (prior_next / prior_orig * 100) if prior_orig > 0 else 0,
+                "npr_pct": (prior_next / prior_orig * 100) if prior_orig > 0 else 0,
                 "label": f"{prior_year} Actuals"
             },
             "methodology": "financial"  # Indicates this uses QBO transaction dates
         }
     except GoogleCloudError as e:
-        logger.error("Failed to fetch supply NRR details: %s", e)
+        logger.error("Failed to fetch supply NPR details: %s", e)
         return {}
+
+
+# Alias for backward compatibility
+def get_supply_nrr_details(fiscal_year: int = FISCAL_YEAR) -> Dict[str, Any]:
+    """Deprecated: Use get_supply_npr_details() instead. Kept for backward compatibility."""
+    return get_supply_npr_details(fiscal_year)
 
 
 def get_customer_count(fiscal_year: int = FISCAL_YEAR) -> Optional[int]:
@@ -1350,6 +1366,9 @@ def get_company_metrics(fiscal_year: int = FISCAL_YEAR) -> Dict[str, Any]:
 
     This is the main entry point for the Overview page.
 
+    Note: Supply-side uses NPR (Net Payout Retention) terminology,
+    Demand-side uses NRR (Net Revenue Retention) terminology.
+
     Returns:
         Dictionary with all company metrics, or empty dict if BigQuery unavailable
     """
@@ -1361,12 +1380,14 @@ def get_company_metrics(fiscal_year: int = FISCAL_YEAR) -> Dict[str, Any]:
         "revenue_ytd": get_revenue_ytd(fiscal_year),
         "take_rate": get_take_rate(fiscal_year),
         "demand_nrr": get_nrr(fiscal_year),
-        "supply_nrr": get_supply_nrr(fiscal_year),
+        "supply_npr": get_supply_npr(fiscal_year),  # NPR for suppliers
+        "supply_nrr": get_supply_npr(fiscal_year),  # Alias for backward compatibility
         "customer_count": get_customer_count(fiscal_year),
         "logo_retention": get_logo_retention(fiscal_year),
         "pipeline_coverage": get_pipeline_coverage(),
         "demand_nrr_details": get_demand_nrr_details(fiscal_year),
-        "supply_nrr_details": get_supply_nrr_details(fiscal_year),
+        "supply_npr_details": get_supply_npr_details(fiscal_year),  # NPR for suppliers
+        "supply_nrr_details": get_supply_npr_details(fiscal_year),  # Alias for backward compatibility
         "updated_at": datetime.now().isoformat(),
     }
 
@@ -1822,3 +1843,256 @@ def get_mql_to_sql_conversion() -> Dict[str, Any]:
     except GoogleCloudError as e:
         logger.error("Failed to fetch MQL to SQL conversion: %s", e)
         return {}
+
+
+# =============================================================================
+# SUPPLY NPR (NET PAYOUT RETENTION) METRICS
+# =============================================================================
+
+def get_supplier_development() -> List[Dict[str, Any]]:
+    """Fetch Supplier_Development view data.
+
+    Returns supplier-level data including:
+    - supplier_org_name: Name from MongoDB remittance or 'Unlinked (Not in Platform)'
+    - core_action_state: active / loosing / lost / inactive
+    - first_year: First year with payouts (cohort assignment)
+    - payout_YYYY: Net payouts by year
+    - npr_YYYY: Net Payout Retention by year
+
+    Returns:
+        List of supplier records or empty list if query fails
+    """
+    query = f"""
+    SELECT *
+    FROM `{PROJECT_ID}.{DATASET}.Supplier_Development`
+    ORDER BY total_payout DESC
+    """
+    try:
+        client = get_client()
+        df = client.query(query).to_dataframe()
+        return df.to_dict('records')
+    except GoogleCloudError as e:
+        logger.error("Failed to fetch Supplier Development: %s", e)
+        return []
+
+
+def get_supplier_cohort_matrix() -> List[Dict[str, Any]]:
+    """Fetch cohort_payout_retention_matrix_by_supplier data.
+
+    Returns cohort retention matrix with 3 charts:
+    - PAYOUT_DOLLARS: Dollar totals by cohort and year
+    - TOTAL: Grand total row for P&L validation
+    - NPR_PERCENT: Net Payout Retention % (base year = 100%)
+
+    Returns:
+        List of cohort records or empty list if query fails
+    """
+    query = f"""
+    SELECT *
+    FROM `{PROJECT_ID}.{DATASET}.cohort_payout_retention_matrix_by_supplier`
+    ORDER BY
+        CASE chart WHEN 'PAYOUT_DOLLARS' THEN 1 WHEN 'TOTAL' THEN 2 WHEN 'NPR_PERCENT' THEN 3 END,
+        first_year NULLS LAST
+    """
+    try:
+        client = get_client()
+        df = client.query(query).to_dataframe()
+        return df.to_dict('records')
+    except GoogleCloudError as e:
+        logger.error("Failed to fetch supplier cohort matrix: %s", e)
+        return []
+
+
+def get_core_action_state_counts(entity: str = 'supplier') -> Dict[str, Any]:
+    """Fetch Active/Loosing/Lost counts for dashboard.
+
+    Args:
+        entity: 'supplier' or 'customer'
+
+    Returns:
+        Dict with counts and totals by state:
+        - active: count, 2024 total, 2025 total
+        - loosing: count, 2024 total, 2025 total
+        - lost: count, 2024 total, 2025 total
+        - total: aggregate counts
+    """
+    if entity == 'supplier':
+        query = f"""
+        WITH payout_accounts AS (
+          SELECT id as account_id
+          FROM `{PROJECT_ID}.src_fivetran_qbo.account`
+          WHERE _fivetran_deleted = FALSE
+            AND account_number IN ('4200', '4210', '4220', '4230')
+        ),
+        remittance_supplier_map AS (
+          SELECT DISTINCT rli.bill_number, rli.ctx.supplier.org.name as supplier_org_name
+          FROM `{PROJECT_ID}.mongodb.remittance_line_items` rli
+          WHERE rli.bill_number IS NOT NULL AND rli.ctx.supplier.org.name IS NOT NULL
+        ),
+        qbo_payout_bills AS (
+          SELECT REGEXP_REPLACE(b.doc_number, r'_\\d+$', '') as base_bill_number,
+            EXTRACT(YEAR FROM b.transaction_date) as txn_year,
+            SUM(CAST(bl.amount AS FLOAT64)) as bill_amount
+          FROM `{PROJECT_ID}.src_fivetran_qbo.bill` b
+          JOIN `{PROJECT_ID}.src_fivetran_qbo.bill_line` bl ON b.id = bl.bill_id
+          JOIN payout_accounts pa ON bl.account_expense_account_id = pa.account_id
+          WHERE b._fivetran_deleted = FALSE AND EXTRACT(YEAR FROM b.transaction_date) IN (2024, 2025)
+          GROUP BY 1, 2
+        ),
+        qbo_payout_credits AS (
+          SELECT REGEXP_REPLACE(vc.doc_number, r'(_credit|c\\d+)$', '') as bill_number,
+            EXTRACT(YEAR FROM vc.transaction_date) as credit_year,
+            SUM(CAST(vcl.amount AS FLOAT64)) as credit_amount
+          FROM `{PROJECT_ID}.src_fivetran_qbo.vendor_credit` vc
+          JOIN `{PROJECT_ID}.src_fivetran_qbo.vendor_credit_line` vcl ON vc.id = vcl.vendor_credit_id
+          JOIN payout_accounts pa ON vcl.account_expense_account_id = pa.account_id
+          WHERE vc._fivetran_deleted = FALSE
+            AND REGEXP_CONTAINS(vc.doc_number, r'(_credit|c\\d+)$')
+            AND EXTRACT(YEAR FROM vc.transaction_date) IN (2024, 2025)
+          GROUP BY 1, 2
+        ),
+        bills_with_supplier AS (
+          SELECT COALESCE(rsm.supplier_org_name, 'Unlinked') as supplier_org_name, b.txn_year,
+            b.bill_amount, 0.0 as credit_amount
+          FROM qbo_payout_bills b
+          LEFT JOIN remittance_supplier_map rsm ON b.base_bill_number = rsm.bill_number
+        ),
+        credits_with_supplier AS (
+          SELECT COALESCE(rsm.supplier_org_name, 'Unlinked') as supplier_org_name, c.credit_year as txn_year,
+            0.0 as bill_amount, c.credit_amount
+          FROM qbo_payout_credits c
+          LEFT JOIN remittance_supplier_map rsm ON c.bill_number = rsm.bill_number
+        ),
+        all_transactions AS (
+          SELECT * FROM bills_with_supplier UNION ALL SELECT * FROM credits_with_supplier
+        ),
+        supplier_yearly_payouts AS (
+          SELECT supplier_org_name, txn_year, SUM(bill_amount) - SUM(credit_amount) as net_payouts
+          FROM all_transactions GROUP BY supplier_org_name, txn_year
+        ),
+        supplier_pivot AS (
+          SELECT supplier_org_name,
+            SUM(CASE WHEN txn_year = 2024 THEN net_payouts ELSE 0 END) as payout_2024,
+            SUM(CASE WHEN txn_year = 2025 THEN net_payouts ELSE 0 END) as payout_2025
+          FROM supplier_yearly_payouts GROUP BY supplier_org_name
+        ),
+        supplier_states AS (
+          SELECT supplier_org_name, payout_2024, payout_2025,
+            CASE
+              WHEN payout_2025 > 0 AND payout_2024 > 0 THEN
+                CASE WHEN (payout_2024 - payout_2025) / NULLIF(payout_2024, 0) > 0.50 THEN 'loosing' ELSE 'active' END
+              WHEN payout_2025 > 0 THEN 'active'
+              WHEN payout_2024 > 0 THEN 'lost'
+              ELSE 'inactive'
+            END as core_action_state
+          FROM supplier_pivot WHERE payout_2024 > 0 OR payout_2025 > 0
+        )
+        SELECT core_action_state, COUNT(*) as count,
+          ROUND(SUM(payout_2024), 2) as total_2024, ROUND(SUM(payout_2025), 2) as total_2025
+        FROM supplier_states GROUP BY core_action_state
+        """
+    else:
+        # Customer entity
+        query = f"""
+        WITH customer_years AS (
+          SELECT customer_id, COALESCE(Net_Revenue_2024, 0) as revenue_2024,
+            COALESCE(Net_Revenue_2025, 0) as revenue_2025
+          FROM `{PROJECT_ID}.{DATASET}.customer_development`
+          WHERE customer_id IS NOT NULL
+        ),
+        customer_states AS (
+          SELECT DISTINCT customer_id, revenue_2024, revenue_2025,
+            CASE
+              WHEN revenue_2025 > 0 AND revenue_2024 > 0 THEN
+                CASE WHEN (revenue_2024 - revenue_2025) / NULLIF(revenue_2024, 0) > 0.50 THEN 'loosing' ELSE 'active' END
+              WHEN revenue_2025 > 0 THEN 'active'
+              WHEN revenue_2024 > 0 THEN 'lost'
+              ELSE 'inactive'
+            END as core_action_state
+          FROM customer_years WHERE revenue_2024 > 0 OR revenue_2025 > 0
+        )
+        SELECT core_action_state, COUNT(DISTINCT customer_id) as count,
+          ROUND(SUM(revenue_2024), 2) as total_2024, ROUND(SUM(revenue_2025), 2) as total_2025
+        FROM customer_states GROUP BY core_action_state
+        """
+
+    try:
+        client = get_client()
+        results = list(client.query(query).result())
+
+        response = {
+            "active": {"count": 0, "total_2024": 0, "total_2025": 0},
+            "loosing": {"count": 0, "total_2024": 0, "total_2025": 0},
+            "lost": {"count": 0, "total_2024": 0, "total_2025": 0},
+            "inactive": {"count": 0, "total_2024": 0, "total_2025": 0},
+            "entity": entity,
+        }
+
+        for row in results:
+            state = row.core_action_state
+            if state in response:
+                response[state]["count"] = int(row.count or 0)
+                response[state]["total_2024"] = float(row.total_2024 or 0)
+                response[state]["total_2025"] = float(row.total_2025 or 0)
+
+        # Calculate totals
+        response["total"] = {
+            "count": sum(response[s]["count"] for s in ["active", "loosing", "lost", "inactive"]),
+            "total_2024": sum(response[s]["total_2024"] for s in ["active", "loosing", "lost", "inactive"]),
+            "total_2025": sum(response[s]["total_2025"] for s in ["active", "loosing", "lost", "inactive"]),
+        }
+
+        return response
+    except GoogleCloudError as e:
+        logger.error("Failed to fetch core action state counts for %s: %s", entity, e)
+        return {}
+
+
+def get_supply_npr_summary_by_year() -> List[Dict[str, Any]]:
+    """Fetch Supply NPR summary by year for P&L validation.
+
+    Returns aggregate supplier payouts by year that should match QBO P&L exactly.
+
+    Returns:
+        List of yearly summary records with gross_bills, vendor_credits, net_payouts, npr_vs_prior_year
+    """
+    query = f"""
+    WITH payout_accounts AS (
+      SELECT id as account_id
+      FROM `{PROJECT_ID}.src_fivetran_qbo.account`
+      WHERE _fivetran_deleted = FALSE AND account_number IN ('4200', '4210', '4220', '4230')
+    ),
+    all_bills AS (
+      SELECT EXTRACT(YEAR FROM b.transaction_date) as txn_year, SUM(CAST(bl.amount AS FLOAT64)) as gross_bills
+      FROM `{PROJECT_ID}.src_fivetran_qbo.bill` b
+      JOIN `{PROJECT_ID}.src_fivetran_qbo.bill_line` bl ON b.id = bl.bill_id
+      JOIN payout_accounts pa ON bl.account_expense_account_id = pa.account_id
+      WHERE b._fivetran_deleted = FALSE
+      GROUP BY 1
+    ),
+    all_credits AS (
+      SELECT EXTRACT(YEAR FROM vc.transaction_date) as txn_year, SUM(CAST(vcl.amount AS FLOAT64)) as vendor_credits
+      FROM `{PROJECT_ID}.src_fivetran_qbo.vendor_credit` vc
+      JOIN `{PROJECT_ID}.src_fivetran_qbo.vendor_credit_line` vcl ON vc.id = vcl.vendor_credit_id
+      JOIN payout_accounts pa ON vcl.account_expense_account_id = pa.account_id
+      WHERE vc._fivetran_deleted = FALSE
+      GROUP BY 1
+    ),
+    yearly_totals AS (
+      SELECT COALESCE(b.txn_year, c.txn_year) as year,
+        COALESCE(b.gross_bills, 0) as gross_bills, COALESCE(c.vendor_credits, 0) as vendor_credits,
+        COALESCE(b.gross_bills, 0) - COALESCE(c.vendor_credits, 0) as net_payouts
+      FROM all_bills b FULL OUTER JOIN all_credits c ON b.txn_year = c.txn_year
+    )
+    SELECT year, ROUND(gross_bills, 2) as gross_bills, ROUND(vendor_credits, 2) as vendor_credits,
+      ROUND(net_payouts, 2) as net_payouts,
+      ROUND(net_payouts / NULLIF(LAG(net_payouts) OVER (ORDER BY year), 0) * 100, 1) as npr_vs_prior_year
+    FROM yearly_totals WHERE year >= 2022 ORDER BY year
+    """
+    try:
+        client = get_client()
+        df = client.query(query).to_dataframe()
+        return df.to_dict('records')
+    except GoogleCloudError as e:
+        logger.error("Failed to fetch supply NPR summary: %s", e)
+        return []

@@ -1,7 +1,11 @@
--- NRR for Top Supply Users (Financial-Based)
--- Owner: Ashton
+-- NPR (Net Payout Retention) for Top Supply Users (Financial-Based)
+-- Owner: Ashton / Supply AM Team
 -- Target: 110%
--- Purpose: Track revenue retention from top supply partners using ACTUAL financial transaction dates
+-- Purpose: Track payout retention from top supply partners using ACTUAL financial transaction dates
+--
+-- TERMINOLOGY CHANGE (2026-02-05):
+-- - "NPR" (Net Payout Retention) for suppliers - did they get paid more?
+-- - "NRR" (Net Revenue Retention) for customers - did they spend more?
 --
 -- Key Difference from nrr-top-supply-users.sql:
 -- - Uses QBO bill/credit transaction dates (when money moved) instead of offer acceptance dates
@@ -9,6 +13,7 @@
 -- - Handles WeWork-style scenarios: 200+ QBO vendor accounts → 1 supplier org in MongoDB
 -- - Includes vendor credits (adjustments, refunds) properly attributed to base bill
 -- - Handles split bills (_2, _3 suffix) by linking to primary bill's supplier
+-- - INCLUDES unlinked bills as "Unlinked (Not in Platform)" row for P&L tie-out
 --
 -- Linkage Quality (as of 2026-02-05, after split bill handling):
 -- - 2026: ~100% linkage
@@ -16,8 +21,8 @@
 -- - 2024: ~98% linkage (after split bill fix)
 -- - Earlier years have lower linkage rates
 --
--- NRR Formula: (Current Year Revenue from Prior Year Suppliers) / (Prior Year Revenue) * 100
--- Revenue = Bills - Vendor Credits (both attributed by transaction_date)
+-- NPR Formula: (Current Year Payouts from Prior Year Suppliers) / (Prior Year Payouts) * 100
+-- Payouts = Bills - Vendor Credits (both attributed by transaction_date)
 
 -- Step 1: Define payout accounts (supplier payments only)
 WITH payout_accounts AS (
@@ -84,9 +89,10 @@ qbo_payout_credits AS (
 
 -- Step 5: Combine bills with supplier attribution
 -- Use base_bill_number for joining so split bills (_2, _3) link to primary's supplier
+-- CHANGED: Use "Unlinked (Not in Platform)" instead of "UNLINKED"
 bills_with_supplier AS (
   SELECT
-    COALESCE(rsm.supplier_org_name, 'UNLINKED') as supplier_org_name,
+    COALESCE(rsm.supplier_org_name, 'Unlinked (Not in Platform)') as supplier_org_name,
     b.txn_year,
     b.bill_amount,
     0.0 as credit_amount
@@ -98,7 +104,7 @@ bills_with_supplier AS (
 -- Step 6: Combine credits with supplier attribution (via linked bill)
 credits_with_supplier AS (
   SELECT
-    COALESCE(rsm.supplier_org_name, 'UNLINKED') as supplier_org_name,
+    COALESCE(rsm.supplier_org_name, 'Unlinked (Not in Platform)') as supplier_org_name,
     c.credit_year as txn_year,
     0.0 as bill_amount,
     c.credit_amount
@@ -114,7 +120,8 @@ all_transactions AS (
   SELECT * FROM credits_with_supplier
 ),
 
--- Step 8: Aggregate by supplier and year (Net Revenue = Bills - Credits)
+-- Step 8: Aggregate by supplier and year (Net Payouts = Bills - Credits)
+-- CHANGED: Include ALL records including Unlinked for P&L tie-out
 supplier_yearly_revenue AS (
   SELECT
     supplier_org_name,
@@ -123,7 +130,7 @@ supplier_yearly_revenue AS (
     SUM(credit_amount) as credits,
     SUM(bill_amount) - SUM(credit_amount) as net_revenue
   FROM all_transactions
-  WHERE supplier_org_name != 'UNLINKED'  -- Exclude unlinked records
+  -- NO EXCLUSION: Include Unlinked for P&L matching
   GROUP BY supplier_org_name, txn_year
 ),
 
@@ -141,8 +148,8 @@ supplier_pivot AS (
   GROUP BY supplier_org_name
 ),
 
--- Step 10: Calculate NRR for each year
-nrr_calculation AS (
+-- Step 10: Calculate NPR (Net Payout Retention) for each year
+npr_calculation AS (
   SELECT
     supplier_org_name,
     rev_2022,
@@ -152,53 +159,56 @@ nrr_calculation AS (
     rev_2026,
     total_ltv,
 
-    -- NRR 2023: Revenue from 2022 suppliers in 2023 / Revenue in 2022
+    -- NPR 2023: Payouts in 2023 / Payouts in 2022
     CASE
       WHEN rev_2022 > 0 THEN ROUND(rev_2023 / rev_2022 * 100, 1)
       ELSE NULL
-    END as nrr_2023,
+    END as npr_2023,
 
-    -- NRR 2024: Revenue from 2023 suppliers in 2024 / Revenue in 2023
+    -- NPR 2024: Payouts in 2024 / Payouts in 2023
     CASE
       WHEN rev_2023 > 0 THEN ROUND(rev_2024 / rev_2023 * 100, 1)
       ELSE NULL
-    END as nrr_2024,
+    END as npr_2024,
 
-    -- NRR 2025: Revenue from 2024 suppliers in 2025 / Revenue in 2024
+    -- NPR 2025: Payouts in 2025 / Payouts in 2024
     CASE
       WHEN rev_2024 > 0 THEN ROUND(rev_2025 / rev_2024 * 100, 1)
       ELSE NULL
-    END as nrr_2025,
+    END as npr_2025,
 
-    -- NRR 2026 (YTD): Revenue from 2025 suppliers in 2026 / Revenue in 2025
+    -- NPR 2026 (YTD): Payouts in 2026 / Payouts in 2025
     CASE
       WHEN rev_2025 > 0 THEN ROUND(rev_2026 / rev_2025 * 100, 1)
       ELSE NULL
-    END as nrr_2026_ytd
+    END as npr_2026_ytd
 
   FROM supplier_pivot
 )
 
--- Main output: NRR by supplier org (top suppliers only)
+-- Main output: NPR by supplier org (top suppliers + Unlinked row)
 SELECT
   supplier_org_name,
-  ROUND(rev_2022, 2) as rev_2022,
-  ROUND(rev_2023, 2) as rev_2023,
-  ROUND(rev_2024, 2) as rev_2024,
-  ROUND(rev_2025, 2) as rev_2025,
-  ROUND(rev_2026, 2) as rev_2026_ytd,
-  nrr_2023,
-  nrr_2024,
-  nrr_2025,
-  nrr_2026_ytd,
+  ROUND(rev_2022, 2) as payout_2022,
+  ROUND(rev_2023, 2) as payout_2023,
+  ROUND(rev_2024, 2) as payout_2024,
+  ROUND(rev_2025, 2) as payout_2025,
+  ROUND(rev_2026, 2) as payout_2026_ytd,
+  npr_2023,
+  npr_2024,
+  npr_2025,
+  npr_2026_ytd,
   ROUND(total_ltv, 2) as total_ltv
-FROM nrr_calculation
-WHERE total_ltv >= 10000  -- Focus on suppliers with meaningful volume
-ORDER BY total_ltv DESC;
+FROM npr_calculation
+WHERE total_ltv >= 10000 OR supplier_org_name = 'Unlinked (Not in Platform)'
+ORDER BY
+  CASE WHEN supplier_org_name = 'Unlinked (Not in Platform)' THEN 1 ELSE 0 END,
+  total_ltv DESC;
 
 
 -- ============================================================
--- SUMMARY VIEW: Aggregate NRR across all top suppliers
+-- SUMMARY VIEW: Aggregate NPR across all suppliers (P&L Matched)
+-- NOTE: Use supply-npr-summary-by-year.sql for P&L tie-out
 -- ============================================================
 /*
 WITH payout_accounts AS (
@@ -231,11 +241,11 @@ qbo_payout_credits AS (
   GROUP BY vc.doc_number, vc.transaction_date
 ),
 bills_with_supplier AS (
-  SELECT COALESCE(rsm.supplier_org_name, 'UNLINKED') as supplier_org_name, b.txn_year, b.bill_amount, 0.0 as credit_amount
+  SELECT COALESCE(rsm.supplier_org_name, 'Unlinked (Not in Platform)') as supplier_org_name, b.txn_year, b.bill_amount, 0.0 as credit_amount
   FROM qbo_payout_bills b LEFT JOIN remittance_supplier_map rsm ON b.bill_number = rsm.bill_number
 ),
 credits_with_supplier AS (
-  SELECT COALESCE(rsm.supplier_org_name, 'UNLINKED') as supplier_org_name, c.credit_year as txn_year, 0.0 as bill_amount, c.credit_amount
+  SELECT COALESCE(rsm.supplier_org_name, 'Unlinked (Not in Platform)') as supplier_org_name, c.credit_year as txn_year, 0.0 as bill_amount, c.credit_amount
   FROM qbo_payout_credits c LEFT JOIN remittance_supplier_map rsm ON c.bill_number = rsm.bill_number
 ),
 all_transactions AS (
@@ -243,33 +253,33 @@ all_transactions AS (
 ),
 supplier_yearly_revenue AS (
   SELECT supplier_org_name, txn_year, SUM(bill_amount) - SUM(credit_amount) as net_revenue
-  FROM all_transactions WHERE supplier_org_name != 'UNLINKED'
+  FROM all_transactions
+  -- NO EXCLUSION: Include all for P&L tie-out
   GROUP BY supplier_org_name, txn_year
 ),
 supplier_pivot AS (
   SELECT supplier_org_name,
-    SUM(CASE WHEN txn_year = 2022 THEN net_revenue ELSE 0 END) as rev_2022,
-    SUM(CASE WHEN txn_year = 2023 THEN net_revenue ELSE 0 END) as rev_2023,
-    SUM(CASE WHEN txn_year = 2024 THEN net_revenue ELSE 0 END) as rev_2024,
-    SUM(CASE WHEN txn_year = 2025 THEN net_revenue ELSE 0 END) as rev_2025,
-    SUM(CASE WHEN txn_year = 2026 THEN net_revenue ELSE 0 END) as rev_2026,
+    SUM(CASE WHEN txn_year = 2022 THEN net_revenue ELSE 0 END) as payout_2022,
+    SUM(CASE WHEN txn_year = 2023 THEN net_revenue ELSE 0 END) as payout_2023,
+    SUM(CASE WHEN txn_year = 2024 THEN net_revenue ELSE 0 END) as payout_2024,
+    SUM(CASE WHEN txn_year = 2025 THEN net_revenue ELSE 0 END) as payout_2025,
+    SUM(CASE WHEN txn_year = 2026 THEN net_revenue ELSE 0 END) as payout_2026,
     SUM(net_revenue) as total_ltv
   FROM supplier_yearly_revenue GROUP BY supplier_org_name
 )
 SELECT
-  'All Top Suppliers (Financial)' as segment,
+  'All Suppliers (P&L Match)' as segment,
   COUNT(*) as supplier_count,
-  ROUND(SUM(rev_2022), 2) as rev_2022,
-  ROUND(SUM(rev_2023), 2) as rev_2023,
-  ROUND(SUM(rev_2024), 2) as rev_2024,
-  ROUND(SUM(rev_2025), 2) as rev_2025,
-  ROUND(SUM(rev_2026), 2) as rev_2026_ytd,
-  ROUND(SUM(rev_2023) / NULLIF(SUM(rev_2022), 0) * 100, 1) as nrr_2023,
-  ROUND(SUM(rev_2024) / NULLIF(SUM(rev_2023), 0) * 100, 1) as nrr_2024,
-  ROUND(SUM(rev_2025) / NULLIF(SUM(rev_2024), 0) * 100, 1) as nrr_2025,
-  ROUND(SUM(rev_2026) / NULLIF(SUM(rev_2025), 0) * 100, 1) as nrr_2026_ytd
-FROM supplier_pivot
-WHERE total_ltv >= 10000;
+  ROUND(SUM(payout_2022), 2) as payout_2022,
+  ROUND(SUM(payout_2023), 2) as payout_2023,
+  ROUND(SUM(payout_2024), 2) as payout_2024,
+  ROUND(SUM(payout_2025), 2) as payout_2025,
+  ROUND(SUM(payout_2026), 2) as payout_2026_ytd,
+  ROUND(SUM(payout_2023) / NULLIF(SUM(payout_2022), 0) * 100, 1) as npr_2023,
+  ROUND(SUM(payout_2024) / NULLIF(SUM(payout_2023), 0) * 100, 1) as npr_2024,
+  ROUND(SUM(payout_2025) / NULLIF(SUM(payout_2024), 0) * 100, 1) as npr_2025,
+  ROUND(SUM(payout_2026) / NULLIF(SUM(payout_2025), 0) * 100, 1) as npr_2026_ytd
+FROM supplier_pivot;
 */
 
 

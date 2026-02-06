@@ -747,15 +747,47 @@ Referrals, General Referral
 
 ## 8_Supply AM - Ashton
 
+### Terminology Update (2026-02-05)
+
+**NPR (Net Payout Retention)** is used for supply-side metrics:
+- **NPR** = Supplier perspective - did they get paid more?
+- **NRR** = Customer perspective - did they spend more?
+
 ### PRIMARY Metrics (Phase 1)
 
 | Metric | Target | Status | Data Source | Why It Matters |
 |--------|--------|:------:|-------------|----------------|
-| **NRR Top Supply Users** | 110% | ✅ Query Created | `supply-am/nrr-top-supply-users-financial.sql` ⭐ | Key supply relationships growing or shrinking. |
+| **NPR Top Supply Users** | 110% | ✅ Query Created | `supply-am/nrr-top-supply-users-financial.sql` ⭐ | Key supply relationships growing or shrinking. |
+| **NPR Summary by Year** | — | ✅ Query Created | `supply-am/supply-npr-summary-by-year.sql` | P&L-matched yearly totals |
+| **NPR by Supplier** | — | ✅ Query Created | `supply-am/supply-npr-by-supplier.sql` | Supplier detail with Unlinked row |
+| **Core Action State Counts** | — | ✅ Query Created | `supply-am/core-action-state-counts.sql` | Active/Loosing/Lost dashboard cards |
 
-**Note:** Two query versions exist:
-- `nrr-top-supply-users.sql` — Offer-based (uses `Supplier_Metrics` view, simple but no credits)
-- `nrr-top-supply-users-financial.sql` ⭐ **RECOMMENDED** — Financial-based (uses QBO bills linked via bill_number, includes credits, proper transaction timing)
+**Query Files:**
+| File | Purpose | Notes |
+|------|---------|-------|
+| `supply-npr-summary-by-year.sql` ⭐ NEW | P&L-matched yearly summary | Totals tie out to QBO exactly |
+| `supply-npr-by-supplier.sql` ⭐ NEW | Supplier detail with Unlinked row | Includes TOTAL for P&L validation |
+| `core-action-state-counts.sql` ⭐ NEW | Active/Loosing/Lost counts | Dashboard health metrics |
+| `nrr-top-supply-users-financial.sql` ⭐ RECOMMENDED | Financial-based NPR per supplier | Renamed NRR→NPR, includes Unlinked |
+| `nrr-top-supply-users.sql` | Legacy offer-based query | Kept for historical reference |
+
+### BigQuery Views
+
+| View Name | Status | Purpose |
+|-----------|--------|---------|
+| `Supplier_Development` | ✅ Created | Mirrors customer_development for supply |
+| `cohort_payout_retention_matrix_by_supplier` | ✅ Created | Payout waterfall by cohort |
+
+### Python Functions (bigquery_client.py)
+
+| Function | Status | Notes |
+|----------|--------|-------|
+| `get_supply_npr()` | ✅ Created | New name (get_supply_nrr kept as alias) |
+| `get_supply_npr_details()` | ✅ Created | New name (get_supply_nrr_details kept as alias) |
+| `get_supplier_development()` | ✅ Created | Fetches Supplier_Development view |
+| `get_supplier_cohort_matrix()` | ✅ Created | Fetches cohort retention matrix |
+| `get_core_action_state_counts()` | ✅ Created | Active/Loosing/Lost counts |
+| `get_supply_npr_summary_by_year()` | ✅ Created | P&L-matched yearly summary |
 
 ### SECONDARY Metrics
 
@@ -979,7 +1011,7 @@ TAB_ACCESS = {
 | Marketing | 1 | 12 | 13 |
 | Accounting | 1 | 12 | 13 |
 | Demand AM | 4 | 2 | 6 |
-| Supply AM | 1 | 5 | 6 |
+| Supply AM | 4 | 5 | 9 |
 | Engineering | 5 | 5 | 10 |
 | **TOTAL** | **27** | **~104** | **~131** |
 
@@ -1012,3 +1044,14 @@ TAB_ACCESS = {
 | 2026-02-05 | Created `supply-am/nrr-top-supply-users.sql` - Supply NRR at 99.9% (below 110% target) |
 | 2026-02-05 | Created `demand-am/offer-acceptance-rate.sql` - Acceptance rate at 58.2% (below 90% target) |
 | 2026-02-05 | Created `supply-am/nrr-top-supply-users-financial.sql` ⭐ RECOMMENDED - Financial-based NRR with bill linkage, credits, and proper transaction timing |
+| 2026-02-05 | **Supply NPR Implementation** - Major update: |
+|            | - Renamed NRR → NPR (Net Payout Retention) for supply-side metrics |
+|            | - Created `supply-am/supply-npr-summary-by-year.sql` - P&L-matched yearly summary |
+|            | - Created `supply-am/supply-npr-by-supplier.sql` - Supplier detail with Unlinked row |
+|            | - Created `supply-am/core-action-state-counts.sql` - Active/Loosing/Lost counts |
+|            | - Created `queries/demand-sales/core-action-state-counts.sql` - Demand side counts |
+|            | - Created BigQuery view: `Supplier_Development` (mirrors customer_development) |
+|            | - Created BigQuery view: `cohort_payout_retention_matrix_by_supplier` |
+|            | - Updated `bigquery_client.py` with new NPR functions |
+|            | - Updated existing query to include Unlinked row for P&L tie-out |
+|            | - See `plans/2026-02-05-supply-npr-implementation.md` for full details |
