@@ -1041,3 +1041,57 @@ def format_value(value: Optional[float], fmt: str) -> str:
         return f"{value:.0f} days"
     else:
         return str(value)
+
+
+# =============================================================================
+# DEPARTMENT-LEVEL AGGREGATION FUNCTIONS
+# =============================================================================
+
+
+def get_coo_metrics() -> Dict[str, Any]:
+    """Get COO/Ops department metrics.
+
+    Aggregates: Invoice Collection, Overdue Invoices,
+    Working Capital, Months of Runway.
+
+    Falls back to mock data when BigQuery is unavailable.
+    """
+    if USE_BIGQUERY and _bigquery_available:
+        try:
+            invoice = bq.get_invoice_collection_rate()
+            overdue = bq.get_overdue_invoices()
+            capital = bq.get_working_capital()
+            runway = bq.get_months_of_runway()
+
+            return {
+                "invoice_collection_rate": invoice.get("collection_rate", 0),
+                "paid_count": invoice.get("paid_count", 0),
+                "total_invoices": invoice.get("total_count", 0),
+                "overdue_count": overdue.get("count", 0),
+                "overdue_amount": overdue.get("amount", 0),
+                "working_capital": capital.get("working_capital", 0),
+                "current_assets": capital.get("current_assets", 0),
+                "current_liabilities": capital.get("current_liabilities", 0),
+                "months_of_runway": runway.get("months"),
+                "cash_balance": runway.get("cash_balance", 0),
+                "avg_monthly_burn": runway.get("avg_monthly_burn", 0),
+                "source": "bigquery",
+            }
+        except Exception as e:
+            logger.warning("Failed to fetch COO metrics from BQ: %s", e)
+
+    # Fallback mock data
+    return {
+        "invoice_collection_rate": 0.93,
+        "paid_count": 93,
+        "total_invoices": 100,
+        "overdue_count": 4,
+        "overdue_amount": 45_000,
+        "working_capital": 1_200_000,
+        "current_assets": 2_000_000,
+        "current_liabilities": 800_000,
+        "months_of_runway": 12,
+        "cash_balance": 600_000,
+        "avg_monthly_burn": 50_000,
+        "source": "mock",
+    }

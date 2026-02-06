@@ -259,6 +259,185 @@ def get_take_rate(fiscal_year: int = FISCAL_YEAR) -> Optional[float]:
         return None
 
 
+def get_invoice_collection_rate(fiscal_year: int = FISCAL_YEAR) -> Dict[str, Any]:
+    """Fetch invoice collection rate from QuickBooks data.
+
+    Formula: Paid Invoices / Total Due Invoices
+    Where: paid = balance = 0, due = due_date <= today
+
+    Query: queries/coo-ops/invoice-collection-rate.sql
+
+    Returns:
+        Dict with collection_rate, paid_count, total_count, or empty dict on error
+    """
+    query = f"""
+    SELECT
+        COUNTIF(balance = 0) AS paid_invoices,
+        COUNT(*) AS total_due_invoices,
+        SAFE_DIVIDE(COUNTIF(balance = 0), COUNT(*)) AS collection_rate_pct
+    FROM `{PROJECT_ID}.src_fivetran_qbo.invoice`
+    WHERE due_date <= CURRENT_DATE()
+      AND _fivetran_deleted = FALSE
+      AND EXTRACT(YEAR FROM transaction_date) = {fiscal_year}
+    """
+    try:
+        client = get_client()
+        result = list(client.query(query).result())
+        if result:
+            row = result[0]
+            return {
+                "collection_rate": float(row.collection_rate_pct) if row.collection_rate_pct else 0,
+                "paid_count": int(row.paid_invoices) if row.paid_invoices else 0,
+                "total_count": int(row.total_due_invoices) if row.total_due_invoices else 0,
+            }
+        return {}
+    except GoogleCloudError as e:
+        logger.error("Failed to fetch invoice collection rate: %s", e)
+        return {}
+
+
+def get_overdue_invoices() -> Dict[str, Any]:
+    """Fetch overdue invoice count and dollar amount.
+
+    Formula: Invoices where balance > 0 AND due_date < today
+    Target: 0
+
+    Query: queries/coo-ops/overdue-invoices.sql
+
+    Returns:
+        Dict with count, amount, or empty dict on error
+    """
+    query = f"""
+    SELECT
+        COUNT(*) AS overdue_count,
+        COALESCE(SUM(balance), 0) AS overdue_amount
+    FROM `{PROJECT_ID}.src_fivetran_qbo.invoice`
+    WHERE balance > 0
+      AND due_date < CURRENT_DATE()
+      AND _fivetran_deleted = FALSE
+    """
+    try:
+        client = get_client()
+        result = list(client.query(query).result())
+        if result:
+            row = result[0]
+            return {
+                "count": int(row.overdue_count) if row.overdue_count else 0,
+                "amount": float(row.overdue_amount) if row.overdue_amount else 0,
+            }
+        return {}
+    except GoogleCloudError as e:
+        logger.error("Failed to fetch overdue invoices: %s", e)
+        return {}
+
+
+def get_working_capital() -> Dict[str, Any]:
+    """Fetch working capital from QuickBooks balance sheet.
+
+    Formula: Current Assets - Current Liabilities
+    Target: >$1M
+    Shared: COO/Ops + CEO/Biz Dev dashboards
+
+    Query: queries/coo-ops/working-capital.sql
+
+    Returns:
+        Dict with working_capital, current_assets, current_liabilities
+    """
+    query = f"""
+    WITH balance_sheet AS (
+        SELECT
+            a.classification,
+            a.account_sub_type,
+            COALESCE(SUM(jel.amount), 0) as balance
+        FROM `{PROJECT_ID}.src_fivetran_qbo.journal_entry_line` jel
+        JOIN `{PROJECT_ID}.src_fivetran_qbo.journal_entry` je ON jel.journal_entry_id = je.id
+        JOIN `{PROJECT_ID}.src_fivetran_qbo.account` a ON jel.account_id = a.id
+        WHERE je._fivetran_deleted = FALSE
+          AND a.classification IN ('Asset', 'Liability')
+          AND a.account_sub_type IN (
+            'Bank', 'AccountsReceivable', 'OtherCurrentAsset',
+            'AccountsPayable', 'OtherCurrentLiability', 'CreditCard'
+          )
+        GROUP BY 1, 2
+    )
+    SELECT
+        SUM(CASE WHEN classification = 'Asset' THEN balance ELSE 0 END) as current_assets,
+        SUM(CASE WHEN classification = 'Liability' THEN ABS(balance) ELSE 0 END) as current_liabilities,
+        SUM(CASE WHEN classification = 'Asset' THEN balance ELSE 0 END)
+        - SUM(CASE WHEN classification = 'Liability' THEN ABS(balance) ELSE 0 END) as working_capital
+    FROM balance_sheet
+    """
+    try:
+        client = get_client()
+        result = list(client.query(query).result())
+        if result:
+            row = result[0]
+            return {
+                "working_capital": float(row.working_capital) if row.working_capital else 0,
+                "current_assets": float(row.current_assets) if row.current_assets else 0,
+                "current_liabilities": float(row.current_liabilities) if row.current_liabilities else 0,
+            }
+        return {}
+    except GoogleCloudError as e:
+        logger.error("Failed to fetch working capital: %s", e)
+        return {}
+
+
+def get_months_of_runway() -> Dict[str, Any]:
+    """Fetch months of runway from QuickBooks.
+
+    Formula: Cash Balance / Average Monthly Burn (3-month trailing)
+    Target: >12 months
+    Shared: COO/Ops + CEO/Biz Dev dashboards
+
+    Query: queries/coo-ops/months-of-runway.sql
+
+    Returns:
+        Dict with months, cash_balance, avg_monthly_burn
+    """
+    query = f"""
+    WITH monthly_expenses AS (
+        SELECT
+            DATE_TRUNC(je.transaction_date, MONTH) as month,
+            SUM(CASE WHEN a.classification = 'Expense' THEN jel.amount ELSE 0 END) as expenses
+        FROM `{PROJECT_ID}.src_fivetran_qbo.journal_entry_line` jel
+        JOIN `{PROJECT_ID}.src_fivetran_qbo.journal_entry` je ON jel.journal_entry_id = je.id
+        JOIN `{PROJECT_ID}.src_fivetran_qbo.account` a ON jel.account_id = a.id
+        WHERE je._fivetran_deleted = FALSE
+          AND je.transaction_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 3 MONTH)
+        GROUP BY 1
+    ),
+    cash AS (
+        SELECT COALESCE(SUM(jel.amount), 0) as cash_balance
+        FROM `{PROJECT_ID}.src_fivetran_qbo.journal_entry_line` jel
+        JOIN `{PROJECT_ID}.src_fivetran_qbo.journal_entry` je ON jel.journal_entry_id = je.id
+        JOIN `{PROJECT_ID}.src_fivetran_qbo.account` a ON jel.account_id = a.id
+        WHERE je._fivetran_deleted = FALSE
+          AND a.account_sub_type = 'Bank'
+    )
+    SELECT
+        c.cash_balance,
+        AVG(e.expenses) as avg_monthly_burn,
+        SAFE_DIVIDE(c.cash_balance, AVG(e.expenses)) as months_of_runway
+    FROM cash c, monthly_expenses e
+    GROUP BY c.cash_balance
+    """
+    try:
+        client = get_client()
+        result = list(client.query(query).result())
+        if result:
+            row = result[0]
+            return {
+                "months": float(row.months_of_runway) if row.months_of_runway else None,
+                "cash_balance": float(row.cash_balance) if row.cash_balance else 0,
+                "avg_monthly_burn": float(row.avg_monthly_burn) if row.avg_monthly_burn else 0,
+            }
+        return {}
+    except GoogleCloudError as e:
+        logger.error("Failed to fetch months of runway: %s", e)
+        return {}
+
+
 def get_nrr(fiscal_year: int = FISCAL_YEAR) -> Optional[float]:
     """Fetch Net Revenue Retention using cohort-based calculation.
 
@@ -1258,3 +1437,231 @@ def load_query_file(filename: str) -> Optional[str]:
         return query_path.read_text()
     logger.warning("Query file not found: %s", query_path)
     return None
+
+
+# =============================================================================
+# DEMAND SALES METRICS
+# =============================================================================
+
+def get_win_rate_90d() -> Dict[str, Any]:
+    """Fetch 90-day win rate from HubSpot deals.
+
+    Formula: Closed Won / (Closed Won + Closed Lost) in last 90 days
+    Target: 30%
+    Pipeline: Default (Purchase Manual)
+
+    Query: queries/demand-sales/win-rate-90-days.sql
+
+    Returns:
+        Dict with win_rate, won_count, lost_count, total_decided
+    """
+    query = f"""
+    SELECT
+        COUNTIF(property_hs_is_closed_won = true) AS won_count,
+        COUNTIF(property_hs_is_closed_won = false) AS lost_count,
+        SAFE_DIVIDE(
+            COUNTIF(property_hs_is_closed_won = true),
+            COUNT(*)
+        ) AS win_rate
+    FROM `{PROJECT_ID}.src_fivetran_hubspot.deal`
+    WHERE deal_pipeline_id = 'default'
+      AND is_deleted = false
+      AND property_hs_is_closed = true
+      AND property_closedate >= DATE_SUB(CURRENT_DATE(), INTERVAL 90 DAY)
+    """
+    try:
+        client = get_client()
+        result = list(client.query(query).result())
+        if result:
+            row = result[0]
+            won = int(row.won_count) if row.won_count else 0
+            lost = int(row.lost_count) if row.lost_count else 0
+            return {
+                "win_rate": float(row.win_rate) if row.win_rate else 0,
+                "won_count": won,
+                "lost_count": lost,
+                "total_decided": won + lost,
+            }
+        return {}
+    except GoogleCloudError as e:
+        logger.error("Failed to fetch win rate: %s", e)
+        return {}
+
+
+def get_avg_deal_size_ytd(fiscal_year: int = FISCAL_YEAR) -> Dict[str, Any]:
+    """Fetch average deal size for closed-won deals YTD.
+
+    Formula: Total Closed Won $ / Closed Won Count
+    Target: $150K
+
+    Query: queries/demand-sales/avg-deal-size-ytd.sql
+
+    Returns:
+        Dict with avg_deal_size, deal_count, total_revenue
+    """
+    query = f"""
+    SELECT
+        AVG(SAFE_CAST(property_amount AS FLOAT64)) AS avg_deal_size,
+        COUNT(*) AS deal_count,
+        SUM(SAFE_CAST(property_amount AS FLOAT64)) AS total_revenue
+    FROM `{PROJECT_ID}.src_fivetran_hubspot.deal`
+    WHERE deal_pipeline_id = 'default'
+      AND is_deleted = false
+      AND property_hs_is_closed_won = true
+      AND EXTRACT(YEAR FROM property_closedate) = {fiscal_year}
+    """
+    try:
+        client = get_client()
+        result = list(client.query(query).result())
+        if result:
+            row = result[0]
+            return {
+                "avg_deal_size": float(row.avg_deal_size) if row.avg_deal_size else 0,
+                "deal_count": int(row.deal_count) if row.deal_count else 0,
+                "total_revenue": float(row.total_revenue) if row.total_revenue else 0,
+            }
+        return {}
+    except GoogleCloudError as e:
+        logger.error("Failed to fetch avg deal size: %s", e)
+        return {}
+
+
+def get_sales_cycle_length(fiscal_year: int = FISCAL_YEAR) -> Dict[str, Any]:
+    """Fetch average sales cycle length for won deals.
+
+    Formula: AVG(closedate - createdate) for closed-won deals
+    Target: <=60 days
+
+    Query: queries/demand-sales/sales-cycle-length.sql
+
+    Returns:
+        Dict with avg_days, median_days, deal_count
+    """
+    query = f"""
+    SELECT
+        AVG(DATE_DIFF(property_closedate, property_createdate, DAY)) AS avg_days,
+        APPROX_QUANTILES(
+            DATE_DIFF(property_closedate, property_createdate, DAY), 100
+        )[OFFSET(50)] AS median_days,
+        COUNT(*) AS deal_count
+    FROM `{PROJECT_ID}.src_fivetran_hubspot.deal`
+    WHERE deal_pipeline_id = 'default'
+      AND is_deleted = false
+      AND property_hs_is_closed_won = true
+      AND EXTRACT(YEAR FROM property_closedate) = {fiscal_year}
+    """
+    try:
+        client = get_client()
+        result = list(client.query(query).result())
+        if result:
+            row = result[0]
+            return {
+                "avg_days": float(row.avg_days) if row.avg_days else 0,
+                "median_days": int(row.median_days) if row.median_days else 0,
+                "deal_count": int(row.deal_count) if row.deal_count else 0,
+            }
+        return {}
+    except GoogleCloudError as e:
+        logger.error("Failed to fetch sales cycle length: %s", e)
+        return {}
+
+
+# =============================================================================
+# MARKETING METRICS
+# =============================================================================
+
+def get_marketing_influenced_pipeline() -> Dict[str, Any]:
+    """Fetch marketing-influenced pipeline using 50/50 FT+LT attribution.
+
+    Formula: (First Touch + Last Touch) / 2 for each deal
+    Only counts 10 specific marketing channels.
+
+    Query: queries/marketing/marketing-influenced-pipeline.sql
+
+    Returns:
+        Dict with influenced_pipeline, ft_attribution, lt_attribution, deal_count
+    """
+    query = f"""
+    WITH marketing_channels AS (
+        SELECT 'DIRECT_TRAFFIC' AS channel UNION ALL SELECT 'PAID_SEARCH'
+        UNION ALL SELECT 'PAID_SOCIAL' UNION ALL SELECT 'ORGANIC_SOCIAL'
+        UNION ALL SELECT 'ORGANIC_SEARCH' UNION ALL SELECT 'EVENT'
+        UNION ALL SELECT 'EMAIL_MARKETING' UNION ALL SELECT 'OTHER_CAMPAIGNS'
+        UNION ALL SELECT 'REFERRALS' UNION ALL SELECT 'GENERAL_REFERRAL'
+    ),
+    deal_attribution AS (
+        SELECT
+            d.deal_id,
+            SAFE_CAST(d.property_amount AS FLOAT64) AS deal_amount,
+            c.property_hs_analytics_source AS first_touch,
+            c.property_hs_analytics_source_data_2 AS last_touch
+        FROM `{PROJECT_ID}.src_fivetran_hubspot.deal` d
+        JOIN `{PROJECT_ID}.src_fivetran_hubspot.deal_contact` dc ON d.deal_id = dc.deal_id
+        JOIN `{PROJECT_ID}.src_fivetran_hubspot.contact` c ON dc.contact_id = c.id
+        WHERE d.deal_pipeline_id = 'default'
+          AND d.is_deleted = false
+          AND d.property_hs_is_closed = false
+    )
+    SELECT
+        SUM((CASE WHEN da.first_touch IN (SELECT channel FROM marketing_channels) THEN da.deal_amount / 2 ELSE 0 END)
+          + (CASE WHEN da.last_touch IN (SELECT channel FROM marketing_channels) THEN da.deal_amount / 2 ELSE 0 END)) AS influenced_pipeline,
+        SUM(CASE WHEN da.first_touch IN (SELECT channel FROM marketing_channels) THEN da.deal_amount ELSE 0 END) AS ft_attribution,
+        SUM(CASE WHEN da.last_touch IN (SELECT channel FROM marketing_channels) THEN da.deal_amount ELSE 0 END) AS lt_attribution,
+        COUNT(DISTINCT da.deal_id) AS deal_count
+    FROM deal_attribution da
+    """
+    try:
+        client = get_client()
+        result = list(client.query(query).result())
+        if result:
+            row = result[0]
+            return {
+                "influenced_pipeline": float(row.influenced_pipeline) if row.influenced_pipeline else 0,
+                "ft_attribution": float(row.ft_attribution) if row.ft_attribution else 0,
+                "lt_attribution": float(row.lt_attribution) if row.lt_attribution else 0,
+                "deal_count": int(row.deal_count) if row.deal_count else 0,
+            }
+        return {}
+    except GoogleCloudError as e:
+        logger.error("Failed to fetch marketing influenced pipeline: %s", e)
+        return {}
+
+
+def get_mql_to_sql_conversion() -> Dict[str, Any]:
+    """Fetch MQL to SQL conversion rate.
+
+    Formula: SQLs / MQLs x 100
+    Target: 30%
+
+    Query: queries/marketing/mql-to-sql-conversion.sql
+
+    Returns:
+        Dict with conversion_rate, mql_count, sql_count
+    """
+    query = f"""
+    SELECT
+        COUNTIF(property_hs_lifecyclestage_marketingqualifiedlead_date IS NOT NULL) AS mql_count,
+        COUNTIF(property_hs_lifecyclestage_salesqualifiedlead_date IS NOT NULL) AS sql_count,
+        SAFE_DIVIDE(
+            COUNTIF(property_hs_lifecyclestage_salesqualifiedlead_date IS NOT NULL),
+            COUNTIF(property_hs_lifecyclestage_marketingqualifiedlead_date IS NOT NULL)
+        ) AS conversion_rate
+    FROM `{PROJECT_ID}.src_fivetran_hubspot.contact`
+    WHERE property_hs_lifecyclestage_marketingqualifiedlead_date IS NOT NULL
+      AND EXTRACT(YEAR FROM SAFE.PARSE_TIMESTAMP('%Y-%m-%dT%H:%M:%E*SZ',
+          property_hs_lifecyclestage_marketingqualifiedlead_date)) = {FISCAL_YEAR}
+    """
+    try:
+        client = get_client()
+        result = list(client.query(query).result())
+        if result:
+            row = result[0]
+            return {
+                "conversion_rate": float(row.conversion_rate) if row.conversion_rate else 0,
+                "mql_count": int(row.mql_count) if row.mql_count else 0,
+                "sql_count": int(row.sql_count) if row.sql_count else 0,
+            }
+        return {}
+    except GoogleCloudError as e:
+        logger.error("Failed to fetch MQL to SQL conversion: %s", e)
+        return {}
