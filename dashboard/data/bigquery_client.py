@@ -1467,7 +1467,7 @@ def get_win_rate_90d() -> Dict[str, Any]:
     WHERE deal_pipeline_id = 'default'
       AND is_deleted = false
       AND property_hs_is_closed = true
-      AND property_closedate >= DATE_SUB(CURRENT_DATE(), INTERVAL 90 DAY)
+      AND DATE(property_closedate) >= DATE_SUB(CURRENT_DATE(), INTERVAL 90 DAY)
     """
     try:
         client = get_client()
@@ -1648,8 +1648,7 @@ def get_mql_to_sql_conversion() -> Dict[str, Any]:
         ) AS conversion_rate
     FROM `{PROJECT_ID}.src_fivetran_hubspot.contact`
     WHERE property_hs_lifecyclestage_marketingqualifiedlead_date IS NOT NULL
-      AND EXTRACT(YEAR FROM SAFE.PARSE_TIMESTAMP('%Y-%m-%dT%H:%M:%E*SZ',
-          property_hs_lifecyclestage_marketingqualifiedlead_date)) = {FISCAL_YEAR}
+      AND EXTRACT(YEAR FROM property_hs_lifecyclestage_marketingqualifiedlead_date) = {FISCAL_YEAR}
     """
     try:
         client = get_client()
