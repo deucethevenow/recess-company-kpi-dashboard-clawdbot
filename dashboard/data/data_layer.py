@@ -402,21 +402,26 @@ def get_status(
 
     Args:
         actual: The actual achieved value
-        target: The target value
+        target: The target value (None means no target)
         higher_is_better: Whether higher values are better
 
     Returns:
         Status emoji string (🟢, 🟡, 🔴, or ⚪)
     """
+    if actual is None or target is None:
+        return STATUS_NO_TARGET
+
+    # Target of 0 is valid for "lower is better" metrics (overdue invoices, etc.)
     if target == 0:
+        if not higher_is_better:
+            return STATUS_ON_TRACK if actual <= 0 else STATUS_OFF_TRACK
         return STATUS_NO_TARGET
 
     if higher_is_better:
         ratio = actual / target
     else:
-        # Division by zero protection
         if actual == 0:
-            return STATUS_OFF_TRACK
+            return STATUS_ON_TRACK
         ratio = target / actual
 
     if ratio >= THRESHOLD_ON_TRACK:
@@ -451,21 +456,25 @@ def get_status_color(
 
     Args:
         actual: The actual achieved value
-        target: The target value
+        target: The target value (None means no target)
         higher_is_better: Whether higher values are better
 
     Returns:
         Hex color string for styling
     """
+    if actual is None or target is None:
+        return COLOR_NEUTRAL
+
     if target == 0:
+        if not higher_is_better:
+            return COLOR_SUCCESS if actual <= 0 else COLOR_DANGER
         return COLOR_NEUTRAL
 
     if higher_is_better:
         ratio = actual / target
     else:
-        # Division by zero protection
         if actual == 0:
-            return COLOR_DANGER
+            return COLOR_SUCCESS
         ratio = target / actual
 
     if ratio >= THRESHOLD_ON_TRACK:
@@ -562,197 +571,274 @@ class _DynamicPersonMetrics:
 # Backwards-compatible export - reloads targets on each access
 PERSON_METRICS = _DynamicPersonMetrics()
 
-# Metric definitions for tooltips
+# Metric definitions for tooltips — 5 fields per metric:
+# definition, importance, calculation, benchmark_2025, edge_cases
 METRIC_DEFINITIONS = {
     "Revenue YTD": {
         "definition": "Total recognized revenue from all sources year-to-date.",
         "importance": "Primary measure of business growth and ability to fund operations.",
-        "calculation": "Sum of all invoiced revenue from Aug 1 to current date."
+        "calculation": "Sum of all invoiced revenue from Aug 1 to current date.",
+        "benchmark_2025": "$3.91M",
+        "edge_cases": "Negative early in fiscal year is expected — FY starts Aug 1 and revenue ramps in Q2.",
     },
     "Revenue vs Target": {
         "definition": "Progress toward annual revenue goal.",
         "importance": "Shows if we're on track to hit our annual commitment to investors.",
-        "calculation": "Current YTD revenue divided by annual target ($10M)."
+        "calculation": "Current YTD revenue divided by annual target ($10M).",
+        "benchmark_2025": "$3.91M",
+        "edge_cases": None,
     },
     "Take Rate %": {
         "definition": "Percentage of GMV that Recess keeps as net revenue after paying organizers.",
         "importance": "Profitability signal. Proves the business model works. Investors care about path to profitability.",
-        "calculation": "Net Revenue / GMV = (GMV - Payouts - Discounts + Credits) / GMV"
+        "calculation": "Net Revenue / GMV = (GMV - Payouts - Discounts + Credits) / GMV",
+        "benchmark_2025": "49%",
+        "edge_cases": "When GMV < $100K early in the year, small credit memos can cause wild swings. Falls back to prior year.",
     },
     "Gross Margin %": {
         "definition": "Percentage of GMV that Recess keeps as net revenue after paying organizers.",
         "importance": "Profitability signal. Proves the business model works. Investors care about path to profitability.",
-        "calculation": "Net Revenue / GMV = (GMV - Payouts - Discounts + Credits) / GMV"
+        "calculation": "Net Revenue / GMV = (GMV - Payouts - Discounts + Credits) / GMV",
+        "benchmark_2025": "49%",
+        "edge_cases": "Alias for Take Rate % — same calculation.",
     },
     "NRR": {
-        "definition": "Net Revenue Retention - revenue from existing customers vs. prior period.",
-        "importance": "Shows if we're growing or shrinking within existing accounts.",
-        "calculation": "(Starting MRR + Expansion - Contraction - Churn) / Starting MRR"
+        "definition": "Net Revenue Retention — revenue from existing demand customers compared to their prior year spend.",
+        "importance": "Shows if we're growing or shrinking within existing accounts. >100% means expansion.",
+        "calculation": "(2025 cohort's 2026 revenue) / (2025 cohort's 2025 revenue)",
+        "benchmark_2025": "22%",
+        "edge_cases": "Partial-year NRR is artificially low — full year needed for true comparison. Don't panic at <100% in H1.",
     },
     "Supply NRR": {
-        "definition": "Net Revenue Retention for supply partners - payouts to prior year suppliers in current year.",
-        "importance": "Shows if key supply relationships are growing or shrinking.",
-        "calculation": "(Prior year suppliers' current year payouts) / (Their prior year payouts)"
+        "definition": "Net Revenue Retention for supply partners — payouts to prior year suppliers in current year.",
+        "importance": "Shows if key supply relationships are growing or shrinking. High NRR = sticky supply network.",
+        "calculation": "(Prior year suppliers' current year payouts) / (Their prior year payouts)",
+        "benchmark_2025": "67%",
+        "edge_cases": "Partial-year calculation. Some suppliers have seasonal contracts — Q4 payouts may spike NRR.",
     },
     "Pipeline Coverage": {
         "definition": "Ratio of weighted pipeline to remaining quota.",
-        "importance": "Predicts likelihood of hitting targets. 3x+ is healthy.",
-        "calculation": "Weighted Pipeline Value / Remaining Quota for Period"
+        "importance": "Predicts likelihood of hitting targets. 6x+ coverage needed given historical win rates.",
+        "calculation": "Weighted Pipeline Value / Remaining Quota for Period",
+        "benchmark_2025": None,
+        "edge_cases": "Drops naturally as deals close — lower coverage late in quarter is expected if closed-won is high.",
     },
     "Logo Retention": {
-        "definition": "Percentage of customers retained year-over-year.",
-        "importance": "High churn signals product-market fit or service issues.",
-        "calculation": "Customers retained / Total customers at period start"
+        "definition": "Percentage of prior-year customers who have revenue in the current fiscal year.",
+        "importance": "High churn signals product-market fit or service issues. <50% is a red flag.",
+        "calculation": "COUNT(DISTINCT customers with revenue in both years) / COUNT(DISTINCT prior year customers)",
+        "benchmark_2025": "26%",
+        "edge_cases": "Uses DISTINCT customer_id (not row count). Early in FY, retention looks low because customers haven't re-activated yet.",
     },
     "Customer Count": {
-        "definition": "Number of active customers with revenue in the current fiscal year.",
+        "definition": "Number of active customers with net revenue > $0 in the current fiscal year.",
         "importance": "Measures customer base health and growth trajectory.",
-        "calculation": "Count of customers with Net Revenue > $0 in current year"
+        "calculation": "COUNT(DISTINCT customer_id) WHERE net_revenue > 0 in FY",
+        "benchmark_2025": "51",
+        "edge_cases": "Uses DISTINCT customer_id — the view has multiple rows per customer. Early FY will show fewer customers.",
     },
     "Sellable Inventory": {
         "definition": "Venues and events available for brand activation campaigns.",
         "importance": "Drives supply capacity and revenue potential.",
-        "calculation": "Count of venues meeting 'sellable' criteria (PRD needed)"
+        "calculation": "Count of venues meeting 'sellable' criteria (PRD needed)",
+        "benchmark_2025": None,
+        "edge_cases": "Requires PRD to define 'sellable' — metric is placeholder until then.",
     },
     "New Logos YTD": {
         "definition": "Number of new customers acquired this fiscal year.",
         "importance": "Measures sales team effectiveness at new business.",
-        "calculation": "Count of new customer contracts signed since Aug 1."
+        "calculation": "Count of new customer contracts signed since Aug 1.",
+        "benchmark_2025": None,
+        "edge_cases": None,
     },
     "Customer Concentration (Top 1)": {
         "definition": "Revenue percentage from largest single customer.",
-        "importance": "High concentration = high risk if customer churns.",
-        "calculation": "Top customer revenue / Total revenue"
+        "importance": "High concentration = high risk if that customer churns. <30% is healthy.",
+        "calculation": "Top customer revenue / Total revenue",
+        "benchmark_2025": "29%",
+        "edge_cases": "Can spike early in FY when only a few customers have booked — look at absolute $ alongside %.",
     },
     "New Unique Inventory": {
         "definition": "New venues/events added to platform.",
         "importance": "Drives TAM expansion and supply diversity.",
-        "calculation": "Count of new unique venues onboarded QTD."
+        "calculation": "Count of new unique venues onboarded QTD.",
+        "benchmark_2025": None,
+        "edge_cases": None,
     },
     "NRR Top Supply Users": {
         "definition": "Revenue retention from top supply partners.",
         "importance": "Shows if key supply relationships are growing.",
-        "calculation": "Current period revenue from top partners / Prior period"
+        "calculation": "Current period revenue from top partners / Prior period",
+        "benchmark_2025": None,
+        "edge_cases": None,
     },
     "Contract Spend %": {
-        "definition": "Percentage of contracted value actually spent.",
-        "importance": "Low spend risks non-renewal; high spend signals upsell.",
-        "calculation": "Actual spend / Contracted commitment × 100"
+        "definition": "Percentage of contracted value actually spent by a customer.",
+        "importance": "Low spend risks non-renewal; high spend signals upsell opportunity.",
+        "calculation": "Actual spend (GMV invoices - credit memos) / Contracted commitment × 100",
+        "benchmark_2025": None,
+        "edge_cases": "New contracts show 0% until first invoice posts. Don't flag <50% in first 30 days.",
     },
     "Calls per Week": {
         "definition": "Customer touchpoints per AM per week.",
         "importance": "Proactive contact correlates with retention.",
-        "calculation": "Total logged calls / Number of weeks in period"
+        "calculation": "Total logged calls / Number of weeks in period",
+        "benchmark_2025": None,
+        "edge_cases": None,
     },
     "NPS Score": {
         "definition": "Net Promoter Score from customer surveys.",
-        "importance": "Leading indicator of retention and referrals.",
-        "calculation": "% Promoters (9-10) - % Detractors (0-6)"
+        "importance": "Leading indicator of retention and referrals. 50+ is excellent.",
+        "calculation": "% Promoters (9-10) - % Detractors (0-6)",
+        "benchmark_2025": None,
+        "edge_cases": "Low response rate can make NPS unreliable. Check sample size before acting on score.",
     },
     "Offer Acceptance %": {
         "definition": "Rate at which brands accept proposed activations.",
-        "importance": "Measures platform-market fit and pricing.",
-        "calculation": "Accepted offers / Total offers sent × 100"
+        "importance": "Measures platform-market fit and pricing. Low acceptance may signal pricing mismatch.",
+        "calculation": "Accepted offers / Total offers sent × 100",
+        "benchmark_2025": None,
+        "edge_cases": None,
     },
     "Time to Fulfill": {
         "definition": "Days from Closed Won date until contract spend reaches 100% of the contract value.",
-        "importance": "TRUE measure of fulfillment velocity - tracks financial completion (invoices minus credit memos), not just offer activity. Faster fulfillment improves cash flow and renewal likelihood.",
-        "calculation": "Closed Won Date → Days until (GMV invoices - credit memos) ≥ contract amount. Median: 69 days."
+        "importance": "TRUE measure of fulfillment velocity — tracks financial completion (invoices minus credit memos). Faster = better cash flow and renewal likelihood.",
+        "calculation": "Closed Won Date → Days until (GMV invoices - credit memos) ≥ contract amount. Uses median.",
+        "benchmark_2025": "69 days",
+        "edge_cases": "Shows 'No contracts fully spent' until the first 2026 contract reaches 100%. Outlier contracts (>365 days) are excluded from median.",
     },
     "Days to Fulfill": {
         "definition": "Days from Closed Won date until contract spend reaches 100% of the contract value.",
-        "importance": "TRUE measure of fulfillment velocity - tracks financial completion (invoices minus credit memos), not just offer activity. Faster fulfillment improves cash flow and renewal likelihood.",
-        "calculation": "Closed Won Date → Days until (GMV invoices - credit memos) ≥ contract amount. Median: 69 days."
+        "importance": "TRUE measure of fulfillment velocity — tracks financial completion (invoices minus credit memos). Faster = better cash flow and renewal likelihood.",
+        "calculation": "Closed Won Date → Days until (GMV invoices - credit memos) ≥ contract amount. Uses median.",
+        "benchmark_2025": "69 days",
+        "edge_cases": "Shows 'No contracts fully spent' until the first 2026 contract reaches 100%. Outlier contracts (>365 days) are excluded from median.",
     },
     "Mktg-Influenced Pipeline": {
-        "definition": "Pipeline value where marketing was a touchpoint.",
-        "importance": "Quantifies marketing's contribution to revenue.",
-        "calculation": "Sum of opportunities with marketing attribution."
+        "definition": "Pipeline value where marketing was a touchpoint in the deal journey.",
+        "importance": "Quantifies marketing's contribution to revenue pipeline.",
+        "calculation": "Sum of opportunities with marketing attribution.",
+        "benchmark_2025": None,
+        "edge_cases": "Requires attribution model — currently first/last touch only. Multi-touch not yet supported.",
     },
     "Invoice Collection %": {
-        "definition": "Percentage of invoices collected within terms.",
-        "importance": "Cash flow health and customer payment behavior.",
-        "calculation": "Invoices collected on time / Total invoices × 100"
+        "definition": "Percentage of due invoices that have been fully collected (balance = 0).",
+        "importance": "Cash flow health. Low collection rate means money is owed but not received.",
+        "calculation": "COUNT(invoices WHERE balance = 0 AND due_date ≤ today) / COUNT(all due invoices) × 100",
+        "benchmark_2025": None,
+        "edge_cases": "Only counts invoices past due date. New invoices with future due dates are excluded.",
     },
     "Meetings Booked (MTD)": {
         "definition": "Discovery/demo meetings scheduled this month.",
-        "importance": "Leading indicator for pipeline generation.",
-        "calculation": "Count of meetings booked in current month."
+        "importance": "Leading indicator for pipeline generation. More meetings = more pipeline.",
+        "calculation": "Count of meetings booked in current month from HubSpot.",
+        "benchmark_2025": None,
+        "edge_cases": None,
     },
     "Lead Queue Runway": {
         "definition": "Days of leads available at current contact rate.",
-        "importance": "Predicts when prospecting will stall.",
-        "calculation": "Leads in queue / Average leads contacted per day"
+        "importance": "Predicts when prospecting will stall — if runway < 14 days, need more leads.",
+        "calculation": "Leads in queue / Average leads contacted per day",
+        "benchmark_2025": None,
+        "edge_cases": None,
     },
     "Weighted Pipeline": {
-        "definition": "Pipeline value adjusted by stage probability.",
-        "importance": "More accurate forecast than raw pipeline.",
-        "calculation": "Sum of (Deal Value × Stage Probability)"
+        "definition": "Pipeline value adjusted by deal stage probability.",
+        "importance": "More accurate forecast than raw pipeline. Used to calculate pipeline coverage.",
+        "calculation": "Sum of (Deal Value × Stage Probability) for all open deals",
+        "benchmark_2025": None,
+        "edge_cases": "Stage probabilities must be calibrated to actual win rates. Default HubSpot probabilities may overstate.",
     },
     "Win Rate (90 days)": {
-        "definition": "Percentage of opportunities won in last 90 days.",
-        "importance": "Sales effectiveness and qualification quality.",
-        "calculation": "Won opps / (Won + Lost opps) in 90-day window"
+        "definition": "Percentage of opportunities won vs. total decided (won + lost) in the last 90 days.",
+        "importance": "Measures sales effectiveness and lead qualification quality.",
+        "calculation": "Won opps / (Won + Lost opps) in 90-day rolling window",
+        "benchmark_2025": None,
+        "edge_cases": "Excludes open deals. Small sample sizes (<10 decided deals) make this unreliable.",
     },
     "Avg Deal Size": {
-        "definition": "Average contract value of closed deals.",
-        "importance": "Trends indicate market positioning.",
-        "calculation": "Total closed revenue / Number of deals"
+        "definition": "Average contract value of closed-won deals in the current fiscal year.",
+        "importance": "Trends indicate market positioning — growing deal sizes suggest upmarket movement.",
+        "calculation": "Total closed-won revenue / Number of closed-won deals",
+        "benchmark_2025": None,
+        "edge_cases": "One large enterprise deal can skew the average significantly. Check median alongside.",
     },
     "Avg Ticket Response": {
         "definition": "Average time to first response on support tickets.",
-        "importance": "Customer experience and service quality.",
-        "calculation": "Sum of first response times / Number of tickets"
+        "importance": "Customer experience and service quality metric.",
+        "calculation": "Sum of first response times / Number of tickets",
+        "benchmark_2025": None,
+        "edge_cases": None,
     },
     "Invoices Overdue": {
-        "definition": "Number of invoices past payment terms.",
-        "importance": "Cash flow risk and collection effectiveness.",
-        "calculation": "Count of invoices past due date."
+        "definition": "Number of invoices past their payment terms.",
+        "importance": "Cash flow risk indicator. Each overdue invoice is money owed but not received.",
+        "calculation": "Count of invoices WHERE due_date < today AND balance > 0",
+        "benchmark_2025": None,
+        "edge_cases": "Includes disputed invoices. Filter by amount to focus on material overdue items.",
     },
     "Overdue Amount": {
-        "definition": "Total dollar value of overdue invoices.",
-        "importance": "Quantifies cash flow at risk.",
-        "calculation": "Sum of all overdue invoice amounts."
+        "definition": "Total dollar value of all overdue invoices.",
+        "importance": "Quantifies cash flow at risk — large amounts may require executive escalation.",
+        "calculation": "SUM(balance) WHERE due_date < today AND balance > 0",
+        "benchmark_2025": None,
+        "edge_cases": None,
     },
     "Avg Days to Collection": {
-        "definition": "Average days from invoice to payment.",
-        "importance": "Working capital efficiency.",
-        "calculation": "Sum of days to collect / Number of invoices"
+        "definition": "Average days from invoice date to payment receipt.",
+        "importance": "Working capital efficiency — lower is better for cash position.",
+        "calculation": "AVG(payment_date - invoice_date) for collected invoices",
+        "benchmark_2025": None,
+        "edge_cases": None,
     },
     "MQL → SQL Conversion": {
-        "definition": "Rate of marketing leads becoming sales qualified.",
-        "importance": "Lead quality and sales-marketing alignment.",
-        "calculation": "SQLs created / MQLs created in period"
+        "definition": "Rate at which marketing qualified leads become sales qualified leads.",
+        "importance": "Measures lead quality and sales-marketing alignment. Low rate = poor targeting.",
+        "calculation": "SQLs created / MQLs created in the same period",
+        "benchmark_2025": None,
+        "edge_cases": "Lag between MQL creation and SQL qualification can distort short time windows. Use 90-day rolling.",
     },
     "First Touch Attribution $": {
-        "definition": "Revenue credited to first marketing touchpoint.",
-        "importance": "Values top-of-funnel marketing efforts.",
-        "calculation": "Revenue from deals where marketing was first touch."
+        "definition": "Revenue credited to the first marketing touchpoint in the customer journey.",
+        "importance": "Values top-of-funnel marketing efforts — which channels create awareness.",
+        "calculation": "Revenue from closed deals attributed to the first marketing touch.",
+        "benchmark_2025": None,
+        "edge_cases": None,
     },
     "Last Touch Attribution $": {
-        "definition": "Revenue credited to last marketing touchpoint.",
-        "importance": "Values bottom-of-funnel marketing efforts.",
-        "calculation": "Revenue from deals where marketing was last touch."
+        "definition": "Revenue credited to the last marketing touchpoint before deal close.",
+        "importance": "Values bottom-of-funnel marketing — which channels drive conversion.",
+        "calculation": "Revenue from closed deals attributed to the last marketing touch.",
+        "benchmark_2025": None,
+        "edge_cases": None,
     },
     "Features Fully Scoped": {
         "definition": "Features with complete PRDs ready for development.",
-        "importance": "Engineering readiness and planning quality.",
-        "calculation": "Count of features with approved PRDs."
+        "importance": "Engineering readiness — more scoped features = less idle dev time.",
+        "calculation": "Count of features with approved PRDs.",
+        "benchmark_2025": None,
+        "edge_cases": None,
     },
     "BizSup Completed": {
         "definition": "Business support tickets resolved this month.",
         "importance": "Internal team enablement velocity.",
-        "calculation": "Count of closed BizSup tickets MTD."
+        "calculation": "Count of closed BizSup tickets MTD.",
+        "benchmark_2025": None,
+        "edge_cases": None,
     },
     "PRDs Generated": {
         "definition": "Product requirement docs created this month.",
         "importance": "Product planning throughput.",
-        "calculation": "Count of PRDs published MTD."
+        "calculation": "Count of PRDs published MTD.",
+        "benchmark_2025": None,
+        "edge_cases": None,
     },
     "FSDs Generated": {
         "definition": "Functional spec documents created this month.",
         "importance": "Engineering planning throughput.",
-        "calculation": "Count of FSDs published MTD."
+        "calculation": "Count of FSDs published MTD.",
+        "benchmark_2025": None,
+        "edge_cases": None,
     },
 }
 
@@ -763,12 +849,15 @@ def get_metric_tooltip(metric_name: str) -> Dict[str, str]:
         metric_name: The name of the metric
 
     Returns:
-        Dictionary with definition, importance, and calculation keys
+        Dictionary with definition, importance, calculation, benchmark_2025,
+        and edge_cases keys
     """
     return METRIC_DEFINITIONS.get(metric_name, {
         "definition": "Metric definition not yet documented.",
         "importance": "—",
-        "calculation": "—"
+        "calculation": "—",
+        "benchmark_2025": None,
+        "edge_cases": None,
     })
 
 # Department detail data (for drill-down tabs)

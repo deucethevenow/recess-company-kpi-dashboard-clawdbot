@@ -162,3 +162,37 @@ Phase 1 is **done** when:
 - `customer_development` view has multiple rows per customer - must use `COUNT(DISTINCT customer_id)`
 - NRR dashboard key is `nrr` but BigQuery returns `demand_nrr` - mapping needed
 - Engineering metrics (Arbind, Mateus, Anderson, Lucas) technically require Phase 5 APIs (Asana, GitHub, Notion) but are listed as Phase 1 PRIMARY by business priority. Consider placeholder/manual entry until Phase 5.
+
+---
+
+## Integration Testing
+
+After implementing a BQ function, follow this standard pattern:
+1. Unit test (mock BQ client)
+2. Integration smoke test (real BQ, `pytest -m integration`)
+3. Enriched tooltip with 5 static fields
+4. Add metric target to `targets.json` via Settings tab
+
+**This phase: 14 integration smoke tests**
+
+Run: `cd dashboard && pytest -m integration`
+
+## Tooltip Enrichment
+
+Each metric gets a 5-section tooltip:
+- Definition (plain English)
+- Why It Matters (business impact)
+- Calculation (formula in monospace)
+- Target pill (from `targets.json` via Settings tab)
+- 2025 Benchmark pill (from `METRIC_DEFINITIONS`, where meaningful)
+- Edge Cases (amber callout, when applicable)
+
+**This phase: 16 tooltips to enrich**
+
+## Settings Tab Targets
+
+New metric targets added to the Settings tab's "Metric Targets" form and saved to `targets.json`:
+
+**This phase: 18 new metric targets**
+
+Standard pattern: "After implementing a BQ function: (1) unit test, (2) integration smoke test, (3) enriched tooltip with 5 static fields, (4) add metric target to targets.json via Settings tab"

@@ -52,6 +52,7 @@ from data.targets_manager import (
     load_targets,
     save_targets,
     get_all_targets,
+    get_metric_target,
 )
 
 # Page config - wide layout for sidebar
@@ -71,21 +72,35 @@ def get_status_info(
 
     Args:
         actual: The actual value achieved (can be None)
-        target: The target value to compare against
+        target: The target value to compare against (None means no target)
         higher_is_better: Whether higher values indicate better performance
 
     Returns:
         Tuple of (status_class, status_label) for styling
     """
-    if actual is None or target == 0:
+    if actual is None:
+        return "neutral", "No Data"
+    if target is None:
         return "neutral", "No Target"
+
+    # Target of 0 is valid (e.g., zero overdue invoices, zero pipeline gap)
+    if target == 0:
+        if not higher_is_better:
+            # Lower is better, target is 0 — check if actual is at or near 0
+            if actual <= 0:
+                return "success", "On Track"
+            else:
+                return "danger", "Off Track"
+        else:
+            # Higher is better but target is 0 — no meaningful ratio
+            return "neutral", "No Target"
 
     if higher_is_better:
         ratio = actual / target
     else:
         # Division by zero protection
         if actual == 0:
-            return "danger", "Off Track"
+            return "success", "On Track"
         ratio = target / actual
 
     if ratio >= THRESHOLD_ON_TRACK:
@@ -634,7 +649,7 @@ st.markdown("""
         bottom: calc(100% + 8px);
         left: 50%;
         transform: translateX(-50%) translateY(4px);
-        width: 260px;
+        width: 300px;
         background: var(--text-primary);
         color: white;
         padding: 1rem;
@@ -688,6 +703,50 @@ st.markdown("""
         background: rgba(255,255,255,0.1);
         padding: 0.375rem 0.5rem;
         border-radius: 4px;
+    }
+
+    /* Target & Benchmark row - compact pill-style display */
+    .tooltip-context {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        margin: 0.625rem 0;
+        padding: 0.5rem;
+        background: rgba(255, 255, 255, 0.06);
+        border-radius: 6px;
+    }
+
+    .tooltip-pill {
+        font-size: 0.6875rem;
+        font-family: 'JetBrains Mono', monospace;
+        padding: 0.2rem 0.5rem;
+        border-radius: 4px;
+        white-space: nowrap;
+    }
+
+    .tooltip-pill.target {
+        background: rgba(19, 186, 213, 0.15);
+        color: #5fd4e8;
+        border: 1px solid rgba(19, 186, 213, 0.25);
+    }
+
+    .tooltip-pill.benchmark {
+        background: rgba(100, 116, 139, 0.2);
+        color: #94a3b8;
+        border: 1px solid rgba(100, 116, 139, 0.3);
+    }
+
+    /* Edge cases - amber warning callout */
+    .tooltip-edge {
+        font-size: 0.75rem;
+        line-height: 1.4;
+        font-style: italic;
+        color: rgba(255, 255, 255, 0.85);
+        padding: 0.375rem 0.5rem;
+        border-left: 2px solid #f59e0b;
+        margin-top: 0.5rem;
+        background: rgba(245, 158, 11, 0.08);
+        border-radius: 0 4px 4px 0;
     }
 
     /* Chart Styling */
@@ -1390,6 +1449,23 @@ def render_health_metrics():
             status_class, status_label = get_status_info(val, tgt, higher_is_better)
 
         tooltip = get_metric_tooltip(m["key"])
+        target_info = get_metric_target(m["key"])
+
+        # Build enriched tooltip HTML — target from Settings, benchmark from METRIC_DEFINITIONS
+        edge_html = ""
+        if tooltip.get("edge_cases"):
+            edge_html = f'<div class="tooltip-label">\u26a0 Edge Cases</div><div class="tooltip-edge">{tooltip["edge_cases"]}</div>'
+
+        context_pills = ""
+        pills = []
+        if target_info:
+            pills.append(f'<span class="tooltip-pill target">\U0001f3af Target: {target_info["display"]}</span>')
+        if tooltip.get("benchmark_2025"):
+            pills.append(f'<span class="tooltip-pill benchmark">\U0001f4ca 2025: {tooltip["benchmark_2025"]}</span>')
+        if pills:
+            context_pills = f'<div class="tooltip-context">{"".join(pills)}</div>'
+
+        tooltip_html = f'''<div class="tooltip"><div class="tooltip-label">Definition</div><div class="tooltip-text">{tooltip["definition"]}</div><div class="tooltip-label">Why It Matters</div><div class="tooltip-text">{tooltip["importance"]}</div><div class="tooltip-label">Calculation</div><div class="tooltip-calc">{tooltip["calculation"]}</div>{context_pills}{edge_html}</div>'''
 
         # Get verification status
         verification = get_metric_verification(m["key"])
@@ -1410,8 +1486,17 @@ def render_health_metrics():
             badge_text = verification.get("note", "Pending")
 
         with col:
-            # Build sub-label for 2025 reference
-            sub_label = f'<div style="font-size: 11px; color: #64748b; margin-top: 4px;">2025: {ref_str}</div>' if ref else ""
+            # Build sub-label: 2026 Target + 2025 Benchmark
+            lines = []
+            if target_info:
+                lines.append(f'\U0001f3af 2026 Target: <span style="color: #5fd4e8;">{target_info["display"]}</span>')
+            if ref:
+                lines.append(f'\U0001f4ca 2025: <span style="color: #94a3b8;">{ref_str}</span>')
+            if lines:
+                inner = "".join(f"<div>{line}</div>" for line in lines)
+                sub_label = f'<div style="font-size: 11px; color: #64748b; margin-top: 4px; line-height: 1.6;">{inner}</div>'
+            else:
+                sub_label = ""
 
             # Special handling for Pipeline Coverage - show weighted pipeline and needed amount
             if m.get("show_pipeline_details"):
@@ -1429,7 +1514,7 @@ def render_health_metrics():
             <div class="metric-card">
                 <div class="metric-live-badge {badge_class}">{badge_text}</div>
                 <div class="metric-card-header">
-                    <div class="metric-card-label">{m["label"]}<span class="info-trigger">i<div class="tooltip"><div class="tooltip-label">Definition</div><div class="tooltip-text">{tooltip["definition"]}</div><div class="tooltip-label">Why It Matters</div><div class="tooltip-text">{tooltip["importance"]}</div><div class="tooltip-label">Calculation</div><div class="tooltip-calc">{tooltip["calculation"]}</div></div></span></div>
+                    <div class="metric-card-label">{m["label"]}<span class="info-trigger">i{tooltip_html}</span></div>
                     <div class="metric-card-icon {m["icon_class"]}">{m["icon"]}</div>
                 </div>
                 <div class="metric-card-value">{val_str}</div>
@@ -1528,17 +1613,45 @@ def render_department_detail(dept_name):
         value_str = format_value(value, fmt)
         status_class, status_label = get_status_info(value, target, higher_is_better)
         tooltip = get_metric_tooltip(m["name"])
+        target_info = get_metric_target(m["name"])
         icon = icon_map.get(fmt, "📊")
+
+        # Build enriched tooltip
+        edge_html = ""
+        if tooltip.get("edge_cases"):
+            edge_html = f'<div class="tooltip-label">\u26a0 Edge Cases</div><div class="tooltip-edge">{tooltip["edge_cases"]}</div>'
+
+        dept_pills = []
+        if target_info:
+            dept_pills.append(f'<span class="tooltip-pill target">\U0001f3af Target: {target_info["display"]}</span>')
+        if tooltip.get("benchmark_2025"):
+            dept_pills.append(f'<span class="tooltip-pill benchmark">\U0001f4ca 2025: {tooltip["benchmark_2025"]}</span>')
+        dept_context = f'<div class="tooltip-context">{"".join(dept_pills)}</div>' if dept_pills else ""
+
+        dept_tooltip_html = f'''<div class="tooltip"><div class="tooltip-label">Definition</div><div class="tooltip-text">{tooltip["definition"]}</div><div class="tooltip-label">Why It Matters</div><div class="tooltip-text">{tooltip["importance"]}</div><div class="tooltip-label">Calculation</div><div class="tooltip-calc">{tooltip["calculation"]}</div>{dept_context}{edge_html}</div>'''
+
+        # Build sub-label with target + benchmark
+        dept_lines = []
+        if target_info:
+            dept_lines.append(f'\U0001f3af 2026 Target: <span style="color: #5fd4e8;">{target_info["display"]}</span>')
+        if tooltip.get("benchmark_2025"):
+            dept_lines.append(f'\U0001f4ca 2025: <span style="color: #94a3b8;">{tooltip["benchmark_2025"]}</span>')
+        if dept_lines:
+            dept_inner = "".join(f"<div>{line}</div>" for line in dept_lines)
+            dept_sub = f'<div style="font-size: 11px; color: #64748b; margin-top: 4px; line-height: 1.6;">{dept_inner}</div>'
+        else:
+            dept_sub = ""
 
         with cols[i % 4]:
             st.markdown(f'''
             <div class="metric-card">
                 <div class="metric-card-header">
-                    <div class="metric-card-label">{m["name"]}<span class="info-trigger">i<div class="tooltip"><div class="tooltip-label">Definition</div><div class="tooltip-text">{tooltip["definition"]}</div><div class="tooltip-label">Why It Matters</div><div class="tooltip-text">{tooltip["importance"]}</div><div class="tooltip-label">Calculation</div><div class="tooltip-calc">{tooltip["calculation"]}</div></div></span></div>
+                    <div class="metric-card-label">{m["name"]}<span class="info-trigger">i{dept_tooltip_html}</span></div>
                     <div class="metric-card-icon cyan">{icon}</div>
                 </div>
                 <div class="metric-card-value">{value_str}</div>
                 <span class="status-badge {status_class}">{status_label}</span>
+                {dept_sub}
             </div>
             ''', unsafe_allow_html=True)
 
@@ -2169,6 +2282,148 @@ def render_settings_page():
                 st.rerun()
             else:
                 st.error("❌ Failed to save targets. Please try again.")
+
+    # Metric Targets Section
+    st.markdown('<div class="section-header">Metric Targets</div>', unsafe_allow_html=True)
+    st.caption("These targets appear in tooltip info cards and drive status badges. Changes take effect within 5 seconds.")
+
+    metric_targets = targets.get("metric_targets", {})
+
+    with st.form("metric_targets_form"):
+        st.markdown("**Company Health**")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            mt_take_rate = st.number_input(
+                "Take Rate Target (%)", value=float(metric_targets.get("Take Rate %", {}).get("value", 0.50)) * 100,
+                min_value=0.0, max_value=100.0, step=1.0, key="mt_take_rate")
+            mt_demand_nrr = st.number_input(
+                "Demand NRR Target (%)", value=float(metric_targets.get("Demand NRR", {}).get("value", 1.10)) * 100,
+                min_value=0.0, max_value=300.0, step=1.0, key="mt_demand_nrr")
+            mt_supply_nrr = st.number_input(
+                "Supply NRR Target (%)", value=float(metric_targets.get("Supply NRR", {}).get("value", 1.10)) * 100,
+                min_value=0.0, max_value=300.0, step=1.0, key="mt_supply_nrr")
+            mt_logo_retention = st.number_input(
+                "Logo Retention Target (%)", value=float(metric_targets.get("Logo Retention", {}).get("value", 0.50)) * 100,
+                min_value=0.0, max_value=100.0, step=1.0, key="mt_logo_retention")
+        with col2:
+            mt_customer_count = st.number_input(
+                "Customer Count Target", value=int(metric_targets.get("Customer Count", {}).get("value", 75)),
+                min_value=0, step=1, key="mt_customer_count")
+            mt_revenue = st.number_input(
+                "Revenue YTD Target ($)", value=int(metric_targets.get("Revenue YTD", {}).get("value", 10_000_000)),
+                min_value=0, step=100_000, key="mt_revenue")
+            mt_pipeline = st.number_input(
+                "Pipeline Coverage Target (x)", value=float(metric_targets.get("Pipeline Coverage", {}).get("value", 6.0)),
+                min_value=0.0, step=0.5, key="mt_pipeline")
+            mt_invoice = st.number_input(
+                "Invoice Collection Target (%)", value=float(metric_targets.get("Invoice Collection %", {}).get("value", 0.95)) * 100,
+                min_value=0.0, max_value=100.0, step=1.0, key="mt_invoice")
+        with col3:
+            mt_working_capital = st.number_input(
+                "Working Capital Target ($)", value=int(metric_targets.get("Working Capital", {}).get("value", 1_000_000)),
+                min_value=0, step=100_000, key="mt_working_capital")
+            mt_runway = st.number_input(
+                "Months of Runway Target", value=int(metric_targets.get("Months of Runway", {}).get("value", 12)),
+                min_value=0, step=1, key="mt_runway")
+            mt_concentration = st.number_input(
+                "Customer Concentration Max (%)", value=float(metric_targets.get("Customer Concentration", {}).get("value", 0.30)) * 100,
+                min_value=0.0, max_value=100.0, step=1.0, key="mt_concentration")
+            mt_days_fulfill = st.number_input(
+                "Days to Fulfill Max", value=int(metric_targets.get("Days to Fulfill", {}).get("value", 60)),
+                min_value=0, step=5, key="mt_days_fulfill")
+
+        st.markdown("**Sales & Marketing**")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            mt_win_rate = st.number_input(
+                "Win Rate Target (%)", value=float(metric_targets.get("Win Rate (90d)", {}).get("value", 0.30)) * 100,
+                min_value=0.0, max_value=100.0, step=1.0, key="mt_win_rate")
+            mt_deal_size = st.number_input(
+                "Avg Deal Size Target ($)", value=int(metric_targets.get("Avg Deal Size", {}).get("value", 150_000)),
+                min_value=0, step=10_000, key="mt_deal_size")
+            mt_sales_cycle = st.number_input(
+                "Sales Cycle Max (days)", value=int(metric_targets.get("Sales Cycle Length", {}).get("value", 60)),
+                min_value=0, step=5, key="mt_sales_cycle")
+        with col2:
+            mt_mql_sql = st.number_input(
+                "MQL→SQL Conversion (%)", value=float(metric_targets.get("MQL to SQL Conversion", {}).get("value", 0.30)) * 100,
+                min_value=0.0, max_value=100.0, step=1.0, key="mt_mql_sql")
+            mt_weighted_pipeline = st.number_input(
+                "Weighted Pipeline Target ($)", value=int(metric_targets.get("Weighted Pipeline", {}).get("value", 5_000_000)),
+                min_value=0, step=100_000, key="mt_weighted_pipeline")
+            mt_meetings = st.number_input(
+                "Meetings Booked Target (MTD)", value=int(metric_targets.get("Meetings Booked (MTD)", {}).get("value", 24)),
+                min_value=0, step=1, key="mt_meetings")
+        with col3:
+            mt_deals_closing = st.number_input(
+                "Deals Closing ≤30d Target", value=int(metric_targets.get("Deals Closing ≤30d", {}).get("value", 5)),
+                min_value=0, step=1, key="mt_deals_closing")
+            mt_expired_deals = st.number_input(
+                "Expired Open Deals Max", value=int(metric_targets.get("Expired Open Deals", {}).get("value", 0)),
+                min_value=0, step=1, key="mt_expired_deals")
+
+        st.markdown("**Operational**")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            mt_nps = st.number_input(
+                "NPS Score Target", value=int(metric_targets.get("NPS Score", {}).get("value", 50)),
+                min_value=0, max_value=100, step=5, key="mt_nps")
+            mt_contract_spend = st.number_input(
+                "Contract Spend Target (%)", value=float(metric_targets.get("Contract Spend %", {}).get("value", 1.00)) * 100,
+                min_value=0.0, max_value=100.0, step=1.0, key="mt_contract_spend")
+        with col2:
+            mt_overdue = st.number_input(
+                "Overdue Invoices Max", value=int(metric_targets.get("Overdue Invoices", {}).get("value", 0)),
+                min_value=0, step=1, key="mt_overdue")
+            mt_contacts = st.number_input(
+                "Weekly Contact Attempts", value=int(metric_targets.get("Weekly Contact Attempts", {}).get("value", 50)),
+                min_value=0, step=5, key="mt_contacts")
+        with col3:
+            mt_not_contacted = st.number_input(
+                "Companies Not Contacted 7d Max", value=int(metric_targets.get("Companies Not Contacted 7d", {}).get("value", 0)),
+                min_value=0, step=1, key="mt_not_contacted")
+
+        submitted_metrics = st.form_submit_button("💾 Save Metric Targets", use_container_width=True)
+
+        if submitted_metrics:
+            def _fmt_pct(v): return f"{int(v)}%"
+            def _fmt_curr(v): return f"${v/1_000_000:.0f}M" if v >= 1_000_000 else f"${v/1_000:.0f}K"
+            def _fmt_days_max(v): return f"≤{int(v)} days"
+            def _fmt_num(v): return f"{int(v)}"
+            def _fmt_mult(v): return f"{v:.1f}x"
+
+            targets["metric_targets"] = {
+                "Take Rate %": {"value": mt_take_rate / 100, "format": "percent", "display": _fmt_pct(mt_take_rate)},
+                "Demand NRR": {"value": mt_demand_nrr / 100, "format": "percent", "display": _fmt_pct(mt_demand_nrr)},
+                "Supply NRR": {"value": mt_supply_nrr / 100, "format": "percent", "display": _fmt_pct(mt_supply_nrr)},
+                "Logo Retention": {"value": mt_logo_retention / 100, "format": "percent", "display": _fmt_pct(mt_logo_retention)},
+                "Customer Count": {"value": mt_customer_count, "format": "number", "display": _fmt_num(mt_customer_count)},
+                "Days to Fulfill": {"value": mt_days_fulfill, "format": "days_max", "display": _fmt_days_max(mt_days_fulfill)},
+                "Revenue YTD": {"value": mt_revenue, "format": "currency", "display": _fmt_curr(mt_revenue)},
+                "Pipeline Coverage": {"value": mt_pipeline, "format": "multiplier", "display": _fmt_mult(mt_pipeline)},
+                "Invoice Collection %": {"value": mt_invoice / 100, "format": "percent", "display": _fmt_pct(mt_invoice)},
+                "Win Rate (90d)": {"value": mt_win_rate / 100, "format": "percent", "display": _fmt_pct(mt_win_rate)},
+                "Avg Deal Size": {"value": mt_deal_size, "format": "currency", "display": _fmt_curr(mt_deal_size)},
+                "Sales Cycle Length": {"value": mt_sales_cycle, "format": "days_max", "display": _fmt_days_max(mt_sales_cycle)},
+                "Working Capital": {"value": mt_working_capital, "format": "currency_min", "display": f">${_fmt_curr(mt_working_capital)}"},
+                "Months of Runway": {"value": mt_runway, "format": "months_min", "display": f">{mt_runway} mo"},
+                "Customer Concentration": {"value": mt_concentration / 100, "format": "percent_max", "display": f"<{int(mt_concentration)}%"},
+                "MQL to SQL Conversion": {"value": mt_mql_sql / 100, "format": "percent", "display": _fmt_pct(mt_mql_sql)},
+                "NPS Score": {"value": mt_nps, "format": "number_min", "display": f"{mt_nps}+"},
+                "Contract Spend %": {"value": mt_contract_spend / 100, "format": "percent", "display": _fmt_pct(mt_contract_spend)},
+                "Overdue Invoices": {"value": mt_overdue, "format": "number_max", "display": _fmt_num(mt_overdue)},
+                "Weighted Pipeline": {"value": mt_weighted_pipeline, "format": "currency", "display": _fmt_curr(mt_weighted_pipeline)},
+                "Meetings Booked (MTD)": {"value": mt_meetings, "format": "number", "display": _fmt_num(mt_meetings)},
+                "Weekly Contact Attempts": {"value": mt_contacts, "format": "number", "display": _fmt_num(mt_contacts)},
+                "Companies Not Contacted 7d": {"value": mt_not_contacted, "format": "number_max", "display": _fmt_num(mt_not_contacted)},
+                "Deals Closing ≤30d": {"value": mt_deals_closing, "format": "number", "display": _fmt_num(mt_deals_closing)},
+                "Expired Open Deals": {"value": mt_expired_deals, "format": "number_max", "display": _fmt_num(mt_expired_deals)},
+            }
+            if save_targets(targets):
+                st.success("✅ Metric targets saved successfully!")
+                st.rerun()
+            else:
+                st.error("❌ Failed to save metric targets. Please try again.")
 
     # Team Targets Section
     st.markdown('<div class="section-header">Team Targets</div>', unsafe_allow_html=True)

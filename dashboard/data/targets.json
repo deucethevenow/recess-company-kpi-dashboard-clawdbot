@@ -94,6 +94,33 @@
       "format": "number"
     }
   },
+  "metric_targets": {
+    "Take Rate %": { "value": 0.50, "format": "percent", "display": "50%" },
+    "Demand NRR": { "value": 1.10, "format": "percent", "display": "110%" },
+    "Supply NRR": { "value": 1.10, "format": "percent", "display": "110%" },
+    "Logo Retention": { "value": 0.50, "format": "percent", "display": "50%" },
+    "Customer Count": { "value": 75, "format": "number", "display": "75" },
+    "Days to Fulfill": { "value": 60, "format": "days_max", "display": "\u226460 days" },
+    "Revenue YTD": { "value": 10000000, "format": "currency", "display": "$10M" },
+    "Pipeline Coverage": { "value": 6.0, "format": "multiplier", "display": "6.0x" },
+    "Invoice Collection %": { "value": 0.95, "format": "percent", "display": "95%" },
+    "Win Rate (90d)": { "value": 0.30, "format": "percent", "display": "30%" },
+    "Avg Deal Size": { "value": 150000, "format": "currency", "display": "$150K" },
+    "Sales Cycle Length": { "value": 60, "format": "days_max", "display": "\u226460 days" },
+    "Working Capital": { "value": 1000000, "format": "currency_min", "display": ">$1M" },
+    "Months of Runway": { "value": 12, "format": "months_min", "display": ">12 mo" },
+    "Customer Concentration": { "value": 0.30, "format": "percent_max", "display": "<30%" },
+    "MQL to SQL Conversion": { "value": 0.30, "format": "percent", "display": "30%" },
+    "NPS Score": { "value": 50, "format": "number_min", "display": "50+" },
+    "Contract Spend %": { "value": 1.00, "format": "percent", "display": "100%" },
+    "Overdue Invoices": { "value": 0, "format": "number_max", "display": "0" },
+    "Weighted Pipeline": { "value": 5000000, "format": "currency", "display": "$5M" },
+    "Meetings Booked (MTD)": { "value": 24, "format": "number", "display": "24" },
+    "Weekly Contact Attempts": { "value": 50, "format": "number", "display": "50" },
+    "Companies Not Contacted 7d": { "value": 0, "format": "number_max", "display": "0" },
+    "Deals Closing \u226430d": { "value": 5, "format": "number", "display": "5" },
+    "Expired Open Deals": { "value": 0, "format": "number_max", "display": "0" }
+  },
   "last_updated": "2026-02-03T09:34:24.893216",
   "updated_by": "Admin"
 }

@@ -139,3 +139,37 @@ Phase 3 is **done** when:
 | Sales AI Scoring | 1 (3 views) | 3 |
 | Supply Phase 3 | 5 | 5 |
 | **Phase 3 Total** | **~15 new** | **~25** |
+
+---
+
+## Integration Testing
+
+After implementing a BQ function, follow this standard pattern:
+1. Unit test (mock BQ client)
+2. Integration smoke test (real BQ, `pytest -m integration`)
+3. Enriched tooltip with 5 static fields
+4. Add metric target to `targets.json` via Settings tab
+
+**This phase: 2 integration smoke tests**
+
+Run: `cd dashboard && pytest -m integration`
+
+## Tooltip Enrichment
+
+Each metric gets a 5-section tooltip:
+- Definition (plain English)
+- Why It Matters (business impact)
+- Calculation (formula in monospace)
+- Target pill (from `targets.json` via Settings tab)
+- 2025 Benchmark pill (from `METRIC_DEFINITIONS`, where meaningful)
+- Edge Cases (amber callout, when applicable)
+
+**This phase: 0 tooltips to enrich**
+
+## Settings Tab Targets
+
+New metric targets added to the Settings tab's "Metric Targets" form and saved to `targets.json`:
+
+**This phase: 0 new metric targets**
+
+Standard pattern: "After implementing a BQ function: (1) unit test, (2) integration smoke test, (3) enriched tooltip with 5 static fields, (4) add metric target to targets.json via Settings tab"

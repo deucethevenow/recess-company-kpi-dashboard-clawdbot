@@ -1,8 +1,10 @@
 """Shared test fixtures for KPI Dashboard tests.
 
 All BigQuery tests use mocked clients to run without credentials.
+Integration tests require GOOGLE_APPLICATION_CREDENTIALS to be set.
 """
 import json
+import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -64,3 +66,26 @@ def targets_json(tmp_path):
 def sql_queries_dir():
     """Path to the SQL query files."""
     return Path(__file__).parent.parent.parent / "queries"
+
+
+# =============================================================================
+# INTEGRATION TEST FIXTURES
+# =============================================================================
+
+def bq_credentials_available() -> bool:
+    """Check if BigQuery credentials are configured."""
+    creds_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
+    return bool(creds_path) and Path(creds_path).exists()
+
+
+@pytest.fixture(scope="session")
+def bq_client():
+    """Session-scoped BigQuery client for integration tests.
+
+    Skips the test gracefully if credentials are not available.
+    """
+    if not bq_credentials_available():
+        pytest.skip("BigQuery credentials not available (set GOOGLE_APPLICATION_CREDENTIALS)")
+
+    from data.bigquery_client import get_client
+    return get_client()

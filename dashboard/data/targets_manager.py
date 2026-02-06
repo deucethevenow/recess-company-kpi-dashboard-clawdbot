@@ -31,6 +31,7 @@ DEFAULT_TARGETS: Dict[str, Any] = {
         "logo_retention_target": 0.50,
     },
     "people": {},
+    "metric_targets": {},
     "last_updated": None,
     "updated_by": None,
 }
@@ -108,6 +109,22 @@ def save_targets(targets: Dict[str, Any], updated_by: str = "Admin") -> bool:
     except (IOError, OSError) as e:
         logger.error("Failed to save targets: %s", e)
         return False
+
+
+def get_metric_target(metric_name: str) -> Optional[Dict[str, Any]]:
+    """Get target info for a specific metric.
+
+    Returns dict with 'value', 'format', 'display' keys, or None if no
+    target is configured for this metric.
+
+    Args:
+        metric_name: The metric name (e.g., 'Take Rate %', 'Win Rate (90d)')
+
+    Returns:
+        Dictionary with target info, or None if not found
+    """
+    targets = load_targets()
+    return targets.get("metric_targets", {}).get(metric_name)
 
 
 def get_company_target(key: str) -> float:
