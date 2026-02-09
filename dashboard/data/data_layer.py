@@ -1194,3 +1194,122 @@ def get_coo_metrics() -> Dict[str, Any]:
         "avg_monthly_burn": 50_000,
         "source": "mock",
     }
+
+
+# =============================================================================
+# DEPARTMENT METRIC HELPERS
+# =============================================================================
+
+def _get_dept_metric_meta(dept: str, metric_name: str) -> Dict[str, Any]:
+    """Return metric metadata from DEPARTMENT_DETAILS (targets, format, etc.)."""
+    metrics = DEPARTMENT_DETAILS.get(dept, {}).get("metrics", [])
+    for metric in metrics:
+        if metric.get("name") == metric_name:
+            return metric
+    return {"name": metric_name, "target": None, "format": "number", "higher_is_better": True}
+
+
+def _build_metric(dept: str, metric_name: str, value: Optional[float]) -> Dict[str, Any]:
+    """Build a metric dict with metadata, preferring live values when provided."""
+    meta = _get_dept_metric_meta(dept, metric_name)
+    return {
+        "label": metric_name,
+        "tooltip_key": metric_name,
+        "value": value if value is not None else meta.get("value"),
+        "target": meta.get("target"),
+        "format": meta.get("format", "number"),
+        "higher_is_better": meta.get("higher_is_better", True),
+    }
+
+
+# =============================================================================
+# DEPARTMENT-LEVEL AGGREGATION FUNCTIONS
+# =============================================================================
+
+def get_demand_sales_metrics() -> List[Dict[str, Any]]:
+    """Get Demand Sales metrics (BigQuery first, then fallback)."""
+    dept = "Demand Sales"
+    nrr = None
+    weighted_pipeline = None
+    win_rate = None
+    avg_deal_size = None
+
+    if USE_BIGQUERY and _bigquery_available:
+        try:
+            nrr = bq.get_nrr(FISCAL_YEAR)
+            pipeline = bq.get_pipeline_details()
+            weighted_pipeline = pipeline.get("weighted_pipeline") if pipeline else None
+            win_rate = (bq.get_win_rate_90d() or {}).get("win_rate")
+            avg_deal_size = (bq.get_avg_deal_size_ytd(FISCAL_YEAR) or {}).get("avg_deal_size")
+        except Exception as e:
+            logger.warning("Failed to fetch Demand Sales metrics from BQ: %s", e)
+
+    return [
+        _build_metric(dept, "NRR", nrr),
+        _build_metric(dept, "Weighted Pipeline", weighted_pipeline),
+        _build_metric(dept, "Win Rate (90 days)", win_rate),
+        _build_metric(dept, "Avg Deal Size", avg_deal_size),
+    ]
+
+
+def get_demand_am_metrics() -> List[Dict[str, Any]]:
+    """Get Demand AM metrics (BigQuery first, then fallback)."""
+    dept = "Demand AM"
+    contract_spend = None
+    nps = None
+
+    if USE_BIGQUERY and _bigquery_available:
+        try:
+            contract_spend = bq.get_contract_spend_pct()
+            nps = bq.get_nps_score()
+        except Exception as e:
+            logger.warning("Failed to fetch Demand AM metrics from BQ: %s", e)
+
+    return [
+        _build_metric(dept, "Contract Spend %", contract_spend),
+        _build_metric(dept, "NPS Score", nps),
+        _build_metric(dept, "Offer Acceptance %", None),
+        _build_metric(dept, "Avg Ticket Response", None),
+    ]
+
+
+def get_marketing_metrics() -> List[Dict[str, Any]]:
+    """Get Marketing metrics (BigQuery first, then fallback)."""
+    dept = "Marketing"
+    influenced = None
+    ft_attr = None
+    lt_attr = None
+    mql_to_sql = None
+
+    if USE_BIGQUERY and _bigquery_available:
+        try:
+            pipeline = bq.get_marketing_influenced_pipeline() or {}
+            influenced = pipeline.get("influenced_pipeline")
+            ft_attr = pipeline.get("ft_attribution")
+            lt_attr = pipeline.get("lt_attribution")
+            mql_to_sql = (bq.get_mql_to_sql_conversion() or {}).get("conversion_rate")
+        except Exception as e:
+            logger.warning("Failed to fetch Marketing metrics from BQ: %s", e)
+
+    return [
+        _build_metric(dept, "Marketing-Influenced Pipeline", influenced),
+        _build_metric(dept, "MQL → SQL Conversion", mql_to_sql),
+        _build_metric(dept, "First Touch Attribution $", ft_attr),
+        _build_metric(dept, "Last Touch Attribution $", lt_attr),
+    ]
+
+
+def get_accounting_metrics() -> List[Dict[str, Any]]:
+    """Get Accounting metrics (BigQuery first, then fallback)."""
+    dept = "Accounting"
+    coo_metrics = get_coo_metrics()
+    invoice_collection = coo_metrics.get("invoice_collection_rate")
+    overdue_count = coo_metrics.get("overdue_count")
+    overdue_amount = coo_metrics.get("overdue_amount")
+
+    return [
+        _build_metric(dept, "Invoice Collection Rate", invoice_collection),
+        _build_metric(dept, "Invoices Overdue", overdue_count),
+        _build_metric(dept, "Overdue Amount", overdue_amount),
+        _build_metric(dept, "Avg Days to Collection", None),
+    ]

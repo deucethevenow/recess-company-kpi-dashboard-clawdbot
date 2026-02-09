@@ -47,6 +47,11 @@ from data.data_layer import (
     get_metric_tooltip,
     get_data_source_status,
     get_metric_verification,
+    get_coo_metrics,
+    get_demand_sales_metrics,
+    get_demand_am_metrics,
+    get_marketing_metrics,
+    get_accounting_metrics,
 )
 from data.targets_manager import (
     load_targets,
@@ -302,26 +307,40 @@ st.markdown("""
 
     /* Page Header */
     .page-header {
-        background: var(--bg-white);
+        background: linear-gradient(135deg, rgba(19, 186, 213, 0.06), rgba(255, 137, 0, 0.04)) , var(--bg-white);
         border-bottom: 1px solid var(--border-light);
-        padding: 1.5rem 2rem;
-        margin: -1rem -1rem 1.5rem -1rem;
+        padding: 1.25rem 2rem;
+        margin: -1rem -1rem 1rem -1rem;
         display: flex;
         justify-content: space-between;
         align-items: center;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .page-header::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: linear-gradient(90deg, var(--recess-cyan), var(--recess-orange));
+        opacity: 0.9;
     }
 
     .page-title {
-        font-size: 1.75rem;
+        font-size: 2.05rem;
         font-weight: 700;
         color: var(--text-primary);
         margin: 0;
+        letter-spacing: -0.02em;
     }
 
     .page-subtitle {
-        font-size: 0.875rem;
+        font-size: 0.85rem;
         color: var(--text-secondary);
-        margin-top: 0.25rem;
+        margin-top: 0.2rem;
     }
 
     .page-meta {
@@ -475,6 +494,15 @@ st.markdown("""
     .metric-card-icon.warning { background: var(--warning-bg); }
     .metric-card-icon.danger { background: var(--danger-bg); }
     .metric-card-icon.neutral { background: var(--bg-main); }
+
+    .metric-card-kicker {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--text-muted);
+        margin-bottom: 0.35rem;
+        font-weight: 600;
+    }
 
     .metric-card-value {
         font-size: 2rem;
@@ -1517,6 +1545,7 @@ def render_health_metrics():
                     <div class="metric-card-label">{m["label"]}<span class="info-trigger">i{tooltip_html}</span></div>
                     <div class="metric-card-icon {m["icon_class"]}">{m["icon"]}</div>
                 </div>
+                <div class="metric-card-kicker">Current YTD</div>
                 <div class="metric-card-value">{val_str}</div>
                 <span class="status-badge {status_class}">{status_label}</span>
                 {sub_label}
@@ -1535,6 +1564,85 @@ def render_health_metrics():
     cols2 = st.columns(4)
     for i, m in enumerate(metrics_row2):
         render_metric_card(m, cols2[i])
+
+
+def render_metric_card_generic(metric: dict, col):
+    """Render a generic metric card using the standard styling."""
+    label = metric.get("label", "Metric")
+    value = metric.get("value")
+    target = metric.get("target")
+    fmt = metric.get("format", "number")
+    icon = metric.get("icon", "📊")
+    icon_class = metric.get("icon_class", "cyan")
+    higher_is_better = metric.get("higher_is_better", True)
+
+    value_str = format_value(value, fmt)
+    if value is None and metric.get("placeholder"):
+        value_str = metric.get("placeholder")
+
+    if metric.get("status_override"):
+        status_class, status_label = metric.get("status_override")
+    else:
+        status_class, status_label = get_status_info(value, target, higher_is_better)
+
+    tooltip_key = metric.get("tooltip_key", label)
+    tooltip = get_metric_tooltip(tooltip_key)
+    target_info = get_metric_target(tooltip_key)
+
+    edge_html = ""
+    if tooltip.get("edge_cases"):
+        edge_html = f'<div class="tooltip-label">⚠ Edge Cases</div><div class="tooltip-edge">{tooltip["edge_cases"]}</div>'
+
+    pills = []
+    if target_info:
+        pills.append(f'<span class="tooltip-pill target">🎯 Target: {target_info["display"]}</span>')
+    if tooltip.get("benchmark_2025"):
+        pills.append(f'<span class="tooltip-pill benchmark">📊 2025: {tooltip["benchmark_2025"]}</span>')
+    context_pills = f'<div class="tooltip-context">{"".join(pills)}</div>' if pills else ""
+
+    tooltip_html = (
+        f'<div class="tooltip">'
+        f'<div class="tooltip-label">Definition</div>'
+        f'<div class="tooltip-text">{tooltip["definition"]}</div>'
+        f'<div class="tooltip-label">Why It Matters</div>'
+        f'<div class="tooltip-text">{tooltip["importance"]}</div>'
+        f'<div class="tooltip-label">Calculation</div>'
+        f'<div class="tooltip-calc">{tooltip["calculation"]}</div>'
+        f'{context_pills}{edge_html}'
+        f'</div>'
+    )
+
+    sub_label = metric.get("sub_label", "")
+    if not sub_label and (target_info or tooltip.get("benchmark_2025")):
+        lines = []
+        if target_info:
+            lines.append(f'🎯 2026 Target: <span style="color: #5fd4e8;">{target_info["display"]}</span>')
+        if tooltip.get("benchmark_2025"):
+            lines.append(f'📊 2025: <span style="color: #94a3b8;">{tooltip["benchmark_2025"]}</span>')
+        if lines:
+            inner = "".join(f"<div>{line}</div>" for line in lines)
+            sub_label = f'<div style="font-size: 11px; color: #64748b; margin-top: 4px; line-height: 1.6;">{inner}</div>'
+
+    with col:
+        st.markdown(f'''
+        <div class="metric-card">
+            <div class="metric-card-header">
+                <div class="metric-card-label">{label}<span class="info-trigger">i{tooltip_html}</span></div>
+                <div class="metric-card-icon {icon_class}">{icon}</div>
+            </div>
+            <div class="metric-card-kicker">Current YTD</div>
+            <div class="metric-card-value">{value_str}</div>
+            <span class="status-badge {status_class}">{status_label}</span>
+            {sub_label}
+        </div>
+        ''', unsafe_allow_html=True)
+
+
+def render_metric_grid(metrics: list, columns: int = 4):
+    """Render a grid of metric cards."""
+    cols = st.columns(columns)
+    for idx, metric in enumerate(metrics):
+        render_metric_card_generic(metric, cols[idx % columns])
 
 
 def render_team_scorecard():
@@ -1712,6 +1820,482 @@ def render_department_detail(dept_name):
         )
 
         st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+
+
+def render_ceo_dashboard():
+    """Render the CEO / Biz Dev dashboard."""
+    render_north_star()
+
+    coo_metrics = get_coo_metrics()
+    metrics = [
+        {
+            "label": "Pipeline Coverage",
+            "tooltip_key": "Pipeline Coverage",
+            "value": COMPANY_METRICS.get("pipeline_coverage"),
+            "target": COMPANY_METRICS.get("pipeline_target"),
+            "format": "multiplier",
+            "icon": "📊",
+            "icon_class": "cyan",
+        },
+        {
+            "label": "Working Capital",
+            "tooltip_key": "Working Capital",
+            "value": coo_metrics.get("working_capital"),
+            "target": (get_metric_target("Working Capital") or {}).get("value"),
+            "format": "currency",
+            "icon": "💵",
+            "icon_class": "success",
+        },
+        {
+            "label": "Months of Runway",
+            "tooltip_key": "Months of Runway",
+            "value": coo_metrics.get("months_of_runway"),
+            "target": (get_metric_target("Months of Runway") or {}).get("value"),
+            "format": "number",
+            "icon": "⏳",
+            "icon_class": "warning",
+        },
+        {
+            "label": "Customer Concentration",
+            "tooltip_key": "Customer Concentration",
+            "value": COMPANY_METRICS.get("concentration_top1"),
+            "target": (get_metric_target("Customer Concentration") or {}).get("value"),
+            "format": "percent",
+            "icon": "🎯",
+            "icon_class": "orange",
+            "higher_is_better": False,
+            "sub_label": f'<div style="font-size: 11px; color: #64748b; margin-top: 4px; line-height: 1.6;">Top customer: <b>{COMPANY_METRICS.get("concentration_top1_name", "—")}</b></div>',
+        },
+    ]
+
+    st.markdown('<div class="section-header">Key Metrics</div>', unsafe_allow_html=True)
+    render_metric_grid(metrics, columns=4)
+
+    render_overview_revenue_trend()
+
+
+def render_coo_dashboard():
+    """Render the COO / Ops dashboard."""
+    take_rate = COMPANY_METRICS.get("take_rate_actual")
+    take_rate_target = COMPANY_METRICS.get("take_rate_target")
+    progress = (take_rate / take_rate_target * 100) if take_rate_target else 0
+
+    st.markdown(f'''
+    <div class="north-star-card" style="background: linear-gradient(135deg, #13bad5 0%, #0ea5c4 100%);">
+        <div class="north-star-label">⚙️ Take Rate %</div>
+        <div class="north-star-value">{format_value(take_rate, "percent")}</div>
+        <div class="north-star-context">Target: {format_value(take_rate_target, "percent") if take_rate_target else "—"}</div>
+        <div class="north-star-progress">
+            <div class="north-star-progress-fill" style="width: {min(progress, 100):.0f}%"></div>
+        </div>
+        <div class="north-star-progress-meta">
+            <span>{progress:.1f}% to goal</span>
+            <span>FY {FISCAL_YEAR}</span>
+        </div>
+    </div>
+    ''', unsafe_allow_html=True)
+
+    coo_metrics = get_coo_metrics()
+
+    st.markdown('<div class="section-header">Financial Health</div>', unsafe_allow_html=True)
+    finance_metrics = [
+        {
+            "label": "Invoice Collection %",
+            "tooltip_key": "Invoice Collection %",
+            "value": coo_metrics.get("invoice_collection_rate"),
+            "target": (get_metric_target("Invoice Collection %") or {}).get("value"),
+            "format": "percent",
+            "icon": "💳",
+            "icon_class": "success",
+        },
+        {
+            "label": "Overdue Invoices",
+            "tooltip_key": "Overdue Invoices",
+            "value": coo_metrics.get("overdue_count"),
+            "target": (get_metric_target("Overdue Invoices") or {}).get("value"),
+            "format": "number",
+            "icon": "⏰",
+            "icon_class": "warning",
+            "higher_is_better": False,
+            "sub_label": f'<div style="font-size: 11px; color: #64748b; margin-top: 4px; line-height: 1.6;">${coo_metrics.get("overdue_amount", 0):,.0f} overdue</div>',
+        },
+        {
+            "label": "Working Capital",
+            "tooltip_key": "Working Capital",
+            "value": coo_metrics.get("working_capital"),
+            "target": (get_metric_target("Working Capital") or {}).get("value"),
+            "format": "currency",
+            "icon": "💼",
+            "icon_class": "cyan",
+        },
+        {
+            "label": "Months of Runway",
+            "tooltip_key": "Months of Runway",
+            "value": coo_metrics.get("months_of_runway"),
+            "target": (get_metric_target("Months of Runway") or {}).get("value"),
+            "format": "number",
+            "icon": "🧭",
+            "icon_class": "orange",
+        },
+    ]
+    render_metric_grid(finance_metrics, columns=4)
+
+    st.markdown('<div class="section-header">Operational Metrics</div>', unsafe_allow_html=True)
+    ops_metrics = [
+        {
+            "label": "Customer Concentration",
+            "tooltip_key": "Customer Concentration",
+            "value": COMPANY_METRICS.get("concentration_top1"),
+            "target": (get_metric_target("Customer Concentration") or {}).get("value"),
+            "format": "percent",
+            "icon": "🎯",
+            "icon_class": "warning",
+            "higher_is_better": False,
+            "sub_label": f'<div style="font-size: 11px; color: #64748b; margin-top: 4px; line-height: 1.6;">Top customer: <b>{COMPANY_METRICS.get("concentration_top1_name", "—")}</b></div>',
+        },
+        {
+            "label": "Net Revenue Gap",
+            "tooltip_key": "Net Revenue Gap",
+            "value": None,
+            "target": None,
+            "format": "currency",
+            "icon": "📉",
+            "icon_class": "neutral",
+            "status_override": ("neutral", "Pending"),
+            "placeholder": "—",
+        },
+        {
+            "label": "Factoring Capacity",
+            "tooltip_key": "Factoring Capacity",
+            "value": None,
+            "target": None,
+            "format": "currency",
+            "icon": "🏦",
+            "icon_class": "neutral",
+            "status_override": ("neutral", "Pending"),
+            "placeholder": "—",
+        },
+        {
+            "label": "Cash Position",
+            "tooltip_key": "Cash Position",
+            "value": coo_metrics.get("cash_balance"),
+            "target": None,
+            "format": "currency",
+            "icon": "💵",
+            "icon_class": "neutral",
+            "status_override": ("neutral", "Phase 4"),
+        },
+    ]
+    render_metric_grid(ops_metrics, columns=4)
+
+    st.markdown('<div class="section-header">Department Roll-up Health</div>', unsafe_allow_html=True)
+    rollup_depts = {"Supply", "Supply AM", "Demand AM", "Accounting"}
+    rows_html = ""
+    for person in PERSON_METRICS:
+        if person["department"] not in rollup_depts:
+            continue
+        actual = person["actual"]
+        target = person["target"]
+        fmt = person["format"]
+        higher_is_better = person.get("higher_is_better", True)
+        actual_str = format_value(actual, fmt)
+        target_str = format_value(target, fmt) if target else "—"
+        status_class, status_label = get_status_info(actual, target, higher_is_better)
+
+        rows_html += f'''
+        <div class="team-row">
+            <div>
+                <div class="team-name">{person["department"]}</div>
+                <div class="team-dept">{person["name"]}</div>
+            </div>
+            <div class="team-metric">{person["metric_name"]}</div>
+            <div class="team-value">{actual_str}</div>
+            <div class="team-target">{target_str}</div>
+            <div><span class="status-badge {status_class}">{status_label}</span></div>
+        </div>
+        '''
+
+    st.markdown('''
+    <div class="team-table">
+        <div class="team-table-header">
+            <div>Department</div>
+            <div>Primary Metric</div>
+            <div>Actual</div>
+            <div>Target</div>
+            <div>Status</div>
+        </div>
+    ''', unsafe_allow_html=True)
+    st.markdown(rows_html + '</div>', unsafe_allow_html=True)
+
+
+def render_demand_sales_dashboard():
+    """Render the Demand Sales dashboard."""
+    coverage = COMPANY_METRICS.get("pipeline_coverage")
+    target = COMPANY_METRICS.get("pipeline_target", 6.0)
+    progress = (coverage / target * 100) if target else 0
+
+    st.markdown(f'''
+    <div class="north-star-card" style="background: linear-gradient(135deg, #13bad5 0%, #0ea5c4 100%);">
+        <div class="north-star-label">💼 Pipeline Coverage</div>
+        <div class="north-star-value">{format_value(coverage, "multiplier")}</div>
+        <div class="north-star-context">Target: {format_value(target, "multiplier") if target else "—"}</div>
+        <div class="north-star-progress">
+            <div class="north-star-progress-fill" style="width: {min(progress, 100):.0f}%"></div>
+        </div>
+        <div class="north-star-progress-meta">
+            <span>{progress:.1f}% to goal</span>
+            <span>FY {FISCAL_YEAR}</span>
+        </div>
+    </div>
+    ''', unsafe_allow_html=True)
+
+    st.markdown('<div class="section-header">Sales Metrics</div>', unsafe_allow_html=True)
+    dept_metrics = get_demand_sales_metrics()
+    metrics = []
+    icon_map = {"currency": "💵", "percent": "📈", "multiplier": "📊", "number": "🔢", "days": "📅"}
+    for m in dept_metrics:
+        metrics.append({
+            "label": m["label"],
+            "tooltip_key": m["tooltip_key"],
+            "value": m.get("value"),
+            "target": m.get("target"),
+            "format": m.get("format", "number"),
+            "icon": icon_map.get(m.get("format"), "📊"),
+            "icon_class": "cyan",
+            "higher_is_better": m.get("higher_is_better", True),
+        })
+    render_metric_grid(metrics, columns=4)
+
+    st.markdown('<div class="section-header">Pipeline by Rep</div>', unsafe_allow_html=True)
+    st.markdown('''
+    <div class="team-table">
+        <div class="team-table-header">
+            <div>Rep</div>
+            <div>Metric</div>
+            <div>Actual</div>
+            <div>Target</div>
+            <div>Status</div>
+        </div>
+    ''', unsafe_allow_html=True)
+
+    rows_html = ""
+    for person in PERSON_METRICS:
+        if person["department"] != "Demand Sales":
+            continue
+        actual = person["actual"]
+        target = person["target"]
+        fmt = person["format"]
+        higher_is_better = person.get("higher_is_better", True)
+        actual_str = format_value(actual, fmt)
+        target_str = format_value(target, fmt) if target else "—"
+        status_class, status_label = get_status_info(actual, target, higher_is_better)
+
+        rows_html += f'''
+        <div class="team-row">
+            <div>
+                <div class="team-name">{person["name"]}</div>
+                <div class="team-dept">Demand Sales</div>
+            </div>
+            <div class="team-metric">{person["metric_name"]}</div>
+            <div class="team-value">{actual_str}</div>
+            <div class="team-target">{target_str}</div>
+            <div><span class="status-badge {status_class}">{status_label}</span></div>
+        </div>
+        '''
+
+    st.markdown(rows_html + '</div>', unsafe_allow_html=True)
+
+
+def render_accounting_dashboard():
+    """Render the Accounting dashboard."""
+    coo_metrics = get_coo_metrics()
+    collection_rate = coo_metrics.get("invoice_collection_rate")
+    target = (get_metric_target("Invoice Collection %") or {}).get("value")
+    progress = (collection_rate / target * 100) if target else 0
+
+    st.markdown(f'''
+    <div class="north-star-card" style="background: linear-gradient(135deg, #13bad5 0%, #0ea5c4 100%);">
+        <div class="north-star-label">💰 Invoice Collection Rate</div>
+        <div class="north-star-value">{format_value(collection_rate, "percent")}</div>
+        <div class="north-star-context">Target: {format_value(target, "percent") if target else "—"}</div>
+        <div class="north-star-progress">
+            <div class="north-star-progress-fill" style="width: {min(progress, 100):.0f}%"></div>
+        </div>
+        <div class="north-star-progress-meta">
+            <span>{progress:.1f}% to goal</span>
+            <span>FY {FISCAL_YEAR}</span>
+        </div>
+    </div>
+    ''', unsafe_allow_html=True)
+
+    st.markdown('<div class="section-header">AR Metrics</div>', unsafe_allow_html=True)
+    acct_metrics = get_accounting_metrics()
+    metrics = []
+    icon_map = {"currency": "💵", "percent": "📈", "number": "🔢", "days": "📅"}
+    for m in acct_metrics:
+        metrics.append({
+            "label": m["label"],
+            "tooltip_key": m["tooltip_key"],
+            "value": m.get("value"),
+            "target": m.get("target"),
+            "format": m.get("format", "number"),
+            "icon": icon_map.get(m.get("format"), "📊"),
+            "icon_class": "cyan",
+            "higher_is_better": m.get("higher_is_better", True),
+        })
+    metrics.append({
+        "label": "Factoring Capacity",
+        "tooltip_key": "Factoring Capacity",
+        "value": None,
+        "target": None,
+        "format": "currency",
+        "icon": "🏦",
+        "icon_class": "neutral",
+        "status_override": ("neutral", "Pending"),
+        "placeholder": "—",
+    })
+    render_metric_grid(metrics, columns=4)
+
+
+def render_demand_am_dashboard():
+    """Render the Demand AM dashboard."""
+    dept_metrics = get_demand_am_metrics()
+    contract_metric = next((m for m in dept_metrics if m.get("label") == "Contract Spend %"), None)
+    contract_value = contract_metric.get("value") if contract_metric else None
+    contract_target = contract_metric.get("target") if contract_metric else None
+    progress = (contract_value / contract_target * 100) if contract_target else 0
+
+    st.markdown(f'''
+    <div class="north-star-card" style="background: linear-gradient(135deg, #13bad5 0%, #0ea5c4 100%);">
+        <div class="north-star-label">🎯 Contract Spend %</div>
+        <div class="north-star-value">{format_value(contract_value, "percent")}</div>
+        <div class="north-star-context">Target: {format_value(contract_target, "percent") if contract_target else "—"}</div>
+        <div class="north-star-progress">
+            <div class="north-star-progress-fill" style="width: {min(progress, 100):.0f}%"></div>
+        </div>
+        <div class="north-star-progress-meta">
+            <span>{progress:.1f}% to goal</span>
+            <span>FY {FISCAL_YEAR}</span>
+        </div>
+    </div>
+    ''', unsafe_allow_html=True)
+
+    st.markdown('<div class="section-header">AM Metrics</div>', unsafe_allow_html=True)
+    metrics = []
+    icon_map = {"currency": "💵", "percent": "📈", "number": "🔢", "hours": "⏱️", "days": "📅"}
+    for m in dept_metrics:
+        metrics.append({
+            "label": m["label"],
+            "tooltip_key": m["tooltip_key"],
+            "value": m.get("value"),
+            "target": m.get("target"),
+            "format": m.get("format", "number"),
+            "icon": icon_map.get(m.get("format"), "📊"),
+            "icon_class": "cyan",
+            "higher_is_better": m.get("higher_is_better", True),
+        })
+    render_metric_grid(metrics, columns=4)
+
+    st.markdown('<div class="section-header">AM Performance by Person</div>', unsafe_allow_html=True)
+    st.markdown('''
+    <div class="team-table">
+        <div class="team-table-header">
+            <div>AM</div>
+            <div>Primary Metric</div>
+            <div>Actual</div>
+            <div>Target</div>
+            <div>Status</div>
+        </div>
+    ''', unsafe_allow_html=True)
+
+    rows_html = ""
+    for person in PERSON_METRICS:
+        if person["department"] != "Demand AM":
+            continue
+        actual = person["actual"]
+        target = person["target"]
+        fmt = person["format"]
+        higher_is_better = person.get("higher_is_better", True)
+        actual_str = format_value(actual, fmt)
+        target_str = format_value(target, fmt) if target else "—"
+        status_class, status_label = get_status_info(actual, target, higher_is_better)
+
+        rows_html += f'''
+        <div class="team-row">
+            <div>
+                <div class="team-name">{person["name"]}</div>
+                <div class="team-dept">Demand AM</div>
+            </div>
+            <div class="team-metric">{person["metric_name"]}</div>
+            <div class="team-value">{actual_str}</div>
+            <div class="team-target">{target_str}</div>
+            <div><span class="status-badge {status_class}">{status_label}</span></div>
+        </div>
+        '''
+
+    st.markdown(rows_html + '</div>', unsafe_allow_html=True)
+
+    st.info("📊 Contract spend distribution + fulfillment charts will be added after Phase 1 data wiring.")
+
+
+def render_marketing_dashboard():
+    """Render the Marketing dashboard."""
+    dept_metrics = get_marketing_metrics()
+    pipeline_metric = next((m for m in dept_metrics if "Marketing-Influenced" in m.get("label", "")), None)
+    pipeline_value = pipeline_metric.get("value") if pipeline_metric else None
+
+    st.markdown(f'''
+    <div class="north-star-card" style="background: linear-gradient(135deg, #13bad5 0%, #0ea5c4 100%);">
+        <div class="north-star-label">📣 Marketing-Influenced Pipeline</div>
+        <div class="north-star-value">{format_value(pipeline_value, "currency")}</div>
+        <div class="north-star-context">Attribution: (First Touch + Last Touch) / 2</div>
+        <div class="north-star-progress">
+            <div class="north-star-progress-fill" style="width: 65%"></div>
+        </div>
+        <div class="north-star-progress-meta">
+            <span>QTD pipeline</span>
+            <span>FY {FISCAL_YEAR}</span>
+        </div>
+    </div>
+    ''', unsafe_allow_html=True)
+
+    st.markdown('<div class="section-header">Conversion Metrics</div>', unsafe_allow_html=True)
+    metrics = []
+    icon_map = {"currency": "💵", "percent": "📈", "number": "🔢"}
+    for m in dept_metrics:
+        metrics.append({
+            "label": m["label"],
+            "tooltip_key": m["tooltip_key"],
+            "value": m.get("value"),
+            "target": m.get("target"),
+            "format": m.get("format", "number"),
+            "icon": icon_map.get(m.get("format"), "📊"),
+            "icon_class": "cyan",
+            "higher_is_better": m.get("higher_is_better", True),
+        })
+    render_metric_grid(metrics, columns=4)
+
+    st.markdown('<div class="section-header">Marketing Leads Funnel</div>', unsafe_allow_html=True)
+    st.info("📊 Funnel chart will populate once marketing funnel query is wired (Phase 1 data wiring).")
+
+    st.markdown('<div class="section-header">Attribution by Channel</div>', unsafe_allow_html=True)
+    st.info("📊 Channel attribution chart will populate once attribution query is wired (Phase 1 data wiring).")
+
+
+
+def render_engineering_dashboard():
+    """Render the Engineering dashboard placeholder (Phase 5)."""
+    st.info("⚠️ Requires GitHub and Asana API integration (Phase 5). Metrics will populate once APIs are connected.")
+
+    st.markdown('<div class="section-header">Engineering Metrics</div>', unsafe_allow_html=True)
+    metrics = [
+        {"label": "Features Fully Scoped", "tooltip_key": "Features Fully Scoped", "value": None, "target": 5, "format": "number", "icon": "🧩", "icon_class": "neutral", "status_override": ("neutral", "Phase 5"), "placeholder": "—"},
+        {"label": "BizSup Completed", "tooltip_key": "BizSup Completed", "value": None, "target": 10, "format": "number", "icon": "✅", "icon_class": "neutral", "status_override": ("neutral", "Phase 5"), "placeholder": "—"},
+        {"label": "PRDs Generated", "tooltip_key": "PRDs Generated", "value": None, "target": 3, "format": "number", "icon": "📝", "icon_class": "neutral", "status_override": ("neutral", "Phase 5"), "placeholder": "—"},
+        {"label": "FSDs Generated", "tooltip_key": "FSDs Generated", "value": None, "target": 2, "format": "number", "icon": "📄", "icon_class": "neutral", "status_override": ("neutral", "Phase 5"), "placeholder": "—"},
+    ]
+    render_metric_grid(metrics, columns=4)
+
 
 
 def render_supply_dashboard():
@@ -2683,6 +3267,27 @@ def main():
         render_team_scorecard()
     elif page == 'settings':
         render_settings_page()
+    elif page == 'ceo':
+        render_page_header("CEO / Biz Dev", "Jack's dashboard — revenue and growth")
+        render_ceo_dashboard()
+    elif page == 'coo':
+        render_page_header("COO / Ops", "Deuce's dashboard — operations and finance")
+        render_coo_dashboard()
+    elif page == 'demand_sales':
+        render_page_header("Demand Sales", "Sales team pipeline and coverage")
+        render_demand_sales_dashboard()
+    elif page == 'demand_am':
+        render_page_header("Demand AM", "Account management performance")
+        render_demand_am_dashboard()
+    elif page == 'marketing':
+        render_page_header("Marketing", "Demand generation performance")
+        render_marketing_dashboard()
+    elif page == 'accounting':
+        render_page_header("Accounting", "AR/AP operations and cash health")
+        render_accounting_dashboard()
+    elif page == 'engineering':
+        render_page_header("Engineering", "Product & engineering delivery (Phase 5)")
+        render_engineering_dashboard()
     elif page == 'supply':
         # Custom Supply dashboard with capacity data
         render_page_header("Supply", "Venue/event acquisition and capacity tracking")
