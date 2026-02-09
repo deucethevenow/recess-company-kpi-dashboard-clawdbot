@@ -54,6 +54,9 @@ from data.data_layer import (
     get_marketing_funnel,
     get_marketing_attribution,
     get_accounting_metrics,
+    get_yoy_metrics,
+    get_quarterly_revenue,
+    get_revenue_time_horizons,
 )
 from data.targets_manager import (
     load_targets,
@@ -163,51 +166,85 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
 
-    /* CSS Variables - Recess Brand */
+    /* ===========================================
+       CSS Variables — Recess Brand Design System
+       =========================================== */
     :root {
-        --recess-cyan: #13bad5;
-        --recess-cyan-light: rgba(19, 186, 213, 0.1);
-        --recess-cyan-medium: rgba(19, 186, 213, 0.2);
-        --recess-orange: #ff8900;
-        --recess-orange-light: rgba(255, 137, 0, 0.1);
-        --bg-main: #f8fafb;
-        --bg-white: #ffffff;
-        --bg-sidebar: #ffffff;
-        --text-primary: #1a1a2e;
-        --text-secondary: #64748b;
+        /* Brand Colors */
+        --recess-aqua: #14B9D6;
+        --recess-aqua-light: rgba(20, 185, 214, 0.08);
+        --recess-aqua-medium: rgba(20, 185, 214, 0.15);
+        --recess-sea-green: #108DA3;
+        --recess-forest: #1FBBA6;
+        --recess-burnt-orange: #F27935;
+        --recess-danger: #E53E3E;
+
+        /* Neutrals */
+        --recess-snow: #F9FAFB;
+        --recess-white: #FFFFFF;
+        --recess-silver: #DBE1E8;
+        --recess-slate: #5F6E81;
+        --recess-charcoal: #323A45;
+
+        /* Semantic aliases (backward compat for inline styles in dept pages) */
+        --recess-cyan: #14B9D6;
+        --recess-cyan-light: rgba(20, 185, 214, 0.08);
+        --recess-cyan-medium: rgba(20, 185, 214, 0.15);
+        --recess-orange: #F27935;
+        --recess-orange-light: rgba(242, 121, 53, 0.08);
+        --bg-main: #F9FAFB;
+        --bg-white: #FFFFFF;
+        --bg-sidebar: #FFFFFF;
+        --text-primary: #323A45;
+        --text-secondary: #5F6E81;
         --text-muted: #94a3b8;
-        --border-light: #e2e8f0;
-        --border-medium: #cbd5e1;
-        --success: #10b981;
-        --success-bg: rgba(16, 185, 129, 0.1);
-        --warning: #f59e0b;
-        --warning-bg: rgba(245, 158, 11, 0.1);
-        --danger: #ef4444;
-        --danger-bg: rgba(239, 68, 68, 0.1);
+        --border-light: #DBE1E8;
+        --border-medium: #C4CBD5;
+
+        /* Status */
+        --success: #14B9D6;
+        --success-bg: rgba(20, 185, 214, 0.08);
+        --warning: #F27935;
+        --warning-bg: rgba(242, 121, 53, 0.08);
+        --danger: #E53E3E;
+        --danger-bg: rgba(229, 62, 62, 0.08);
+
+        /* Positive / Negative (YoY) */
+        --positive: #1FBBA6;
+        --positive-bg: rgba(31, 187, 166, 0.08);
+        --negative: #F27935;
+        --negative-bg: rgba(242, 121, 53, 0.08);
+
+        /* Elevation */
         --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
         --shadow-md: 0 4px 12px rgba(0,0,0,0.06);
         --shadow-lg: 0 8px 24px rgba(0,0,0,0.08);
+
+        /* Radii */
         --radius-sm: 8px;
-        --radius-md: 12px;
-        --radius-lg: 16px;
+        --radius-md: 8px;
+        --radius-lg: 12px;
     }
 
-    /* Global Styles */
+    /* ===========================================
+       Global Styles
+       =========================================== */
     .stApp {
         background: var(--bg-main);
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
 
     /* Hide Streamlit chrome */
     #MainMenu, footer, header, [data-testid="stToolbar"] { display: none !important; }
     .stDeployButton { display: none !important; }
 
-    /* Sidebar Styling - FORCE always visible */
+    /* ===========================================
+       Sidebar
+       =========================================== */
     [data-testid="stSidebar"] {
         background: var(--bg-sidebar);
         border-right: 1px solid var(--border-light);
         padding-top: 0;
-        /* Force sidebar to always be visible */
         transform: none !important;
         width: 280px !important;
         min-width: 280px !important;
@@ -216,7 +253,6 @@ st.markdown("""
         display: flex !important;
     }
 
-    /* Override collapsed state */
     [data-testid="stSidebar"][aria-expanded="false"] {
         transform: none !important;
         width: 280px !important;
@@ -225,7 +261,6 @@ st.markdown("""
         visibility: visible !important;
     }
 
-    /* Ensure sidebar content wrapper is visible */
     [data-testid="stSidebarContent"] {
         display: block !important;
         visibility: visible !important;
@@ -235,7 +270,6 @@ st.markdown("""
         padding-top: 0;
     }
 
-    /* Sidebar Logo */
     .sidebar-logo {
         padding: 1.5rem 1.25rem;
         border-bottom: 1px solid var(--border-light);
@@ -245,7 +279,7 @@ st.markdown("""
     .sidebar-logo h1 {
         font-size: 1.5rem;
         font-weight: 700;
-        color: var(--recess-cyan);
+        color: var(--recess-aqua);
         margin: 0;
         display: flex;
         align-items: center;
@@ -260,7 +294,6 @@ st.markdown("""
         letter-spacing: 0.05em;
     }
 
-    /* Nav Section Headers */
     .nav-section {
         padding: 0.75rem 1.25rem 0.5rem;
         font-size: 0.6875rem;
@@ -270,7 +303,6 @@ st.markdown("""
         color: var(--text-muted);
     }
 
-    /* Nav Items */
     .nav-item {
         display: flex;
         align-items: center;
@@ -278,22 +310,25 @@ st.markdown("""
         padding: 0.75rem 1.25rem;
         margin: 0.125rem 0.5rem;
         border-radius: var(--radius-sm);
-        color: var(--text-secondary);
+        color: var(--recess-slate);
         font-size: 0.9375rem;
         font-weight: 500;
         cursor: pointer;
         transition: all 0.15s ease;
         text-decoration: none;
+        border-left: 3px solid transparent;
     }
 
     .nav-item:hover {
-        background: var(--bg-main);
-        color: var(--text-primary);
+        background: var(--recess-aqua-light);
+        color: var(--recess-charcoal);
     }
 
     .nav-item.active {
-        background: var(--recess-cyan-light);
-        color: var(--recess-cyan);
+        background: var(--recess-aqua-light);
+        color: var(--recess-aqua);
+        border-left-color: var(--recess-aqua);
+        font-weight: 600;
     }
 
     .nav-item .icon {
@@ -302,46 +337,37 @@ st.markdown("""
         text-align: center;
     }
 
-    /* Main Content Area */
+    /* ===========================================
+       Main Content Area
+       =========================================== */
     .main-content {
         padding: 0;
     }
 
-    /* Page Header */
+    /* ===========================================
+       Page Header — clean white, no gradient
+       =========================================== */
     .page-header {
-        background: linear-gradient(135deg, rgba(19, 186, 213, 0.06), rgba(255, 137, 0, 0.04)) , var(--bg-white);
+        background: var(--bg-white);
         border-bottom: 1px solid var(--border-light);
         padding: 1.25rem 2rem;
         margin: -1rem -1rem 1rem -1rem;
         display: flex;
         justify-content: space-between;
         align-items: center;
-        position: relative;
-        overflow: hidden;
-    }
-
-    .page-header::after {
-        content: "";
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 3px;
-        background: linear-gradient(90deg, var(--recess-cyan), var(--recess-orange));
-        opacity: 0.9;
     }
 
     .page-title {
-        font-size: 2.05rem;
-        font-weight: 700;
-        color: var(--text-primary);
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: var(--recess-charcoal);
         margin: 0;
-        letter-spacing: -0.02em;
+        letter-spacing: -0.01em;
     }
 
     .page-subtitle {
         font-size: 0.85rem;
-        color: var(--text-secondary);
+        color: var(--recess-slate);
         margin-top: 0.2rem;
     }
 
@@ -359,8 +385,6 @@ st.markdown("""
         display: inline-flex;
         align-items: center;
         gap: 0.375rem;
-        background: var(--success-bg);
-        color: var(--success);
         padding: 0.25rem 0.625rem;
         border-radius: 100px;
         font-size: 0.6875rem;
@@ -370,11 +394,22 @@ st.markdown("""
         margin-top: 0.5rem;
     }
 
+    .live-badge,
+    .live-badge.live {
+        background: var(--positive-bg);
+        color: var(--positive);
+    }
+
+    .live-badge.mock {
+        background: var(--warning-bg);
+        color: var(--warning);
+    }
+
     .live-badge::before {
         content: '';
         width: 6px;
         height: 6px;
-        background: var(--success);
+        background: currentColor;
         border-radius: 50%;
         animation: pulse 2s ease-in-out infinite;
     }
@@ -384,27 +419,24 @@ st.markdown("""
         50% { opacity: 0.4; }
     }
 
-    /* North Star Card */
+    /* ===========================================
+       North Star Card — clean white, aqua accent
+       =========================================== */
     .north-star-card {
-        background: linear-gradient(135deg, var(--recess-cyan) 0%, #0ea5c4 100%);
-        border-radius: var(--radius-lg);
-        padding: 2rem;
-        color: white;
+        background: var(--bg-white);
+        border: 1px solid var(--border-light);
+        border-left: 4px solid var(--recess-aqua);
+        border-radius: var(--radius-md);
+        padding: 1.5rem 2rem;
+        color: var(--recess-charcoal);
         margin-bottom: 1.5rem;
-        box-shadow: var(--shadow-lg);
+        box-shadow: var(--shadow-sm);
         position: relative;
         overflow: hidden;
     }
 
     .north-star-card::before {
-        content: '';
-        position: absolute;
-        top: -50%;
-        right: -20%;
-        width: 300px;
-        height: 300px;
-        background: rgba(255,255,255,0.1);
-        border-radius: 50%;
+        display: none;
     }
 
     .north-star-label {
@@ -412,33 +444,34 @@ st.markdown("""
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.1em;
-        opacity: 0.9;
+        color: var(--recess-slate);
         margin-bottom: 0.5rem;
     }
 
     .north-star-value {
-        font-size: 3.5rem;
+        font-size: 2.5rem;
         font-weight: 700;
         line-height: 1;
         margin-bottom: 0.5rem;
+        color: var(--recess-charcoal);
     }
 
     .north-star-context {
-        font-size: 1rem;
-        opacity: 0.9;
+        font-size: 0.9375rem;
+        color: var(--recess-slate);
     }
 
     .north-star-progress {
-        margin-top: 1.5rem;
-        background: rgba(255,255,255,0.2);
-        height: 8px;
+        margin-top: 1.25rem;
+        background: var(--recess-silver);
+        height: 6px;
         border-radius: 4px;
         overflow: hidden;
     }
 
     .north-star-progress-fill {
         height: 100%;
-        background: white;
+        background: var(--recess-aqua);
         border-radius: 4px;
         transition: width 0.5s ease;
     }
@@ -448,18 +481,142 @@ st.markdown("""
         justify-content: space-between;
         margin-top: 0.5rem;
         font-size: 0.8125rem;
-        opacity: 0.8;
+        color: var(--recess-slate);
     }
 
-    /* Metric Cards Grid */
+    /* ===========================================
+       Revenue Time Horizon Cards (NEW)
+       =========================================== */
+    .revenue-horizon-card {
+        background: var(--bg-white);
+        border: 1px solid var(--border-light);
+        border-radius: var(--radius-md);
+        padding: 20px;
+        box-shadow: var(--shadow-sm);
+    }
+
+    .revenue-horizon-card.current {
+        border-left: 3px solid var(--recess-aqua);
+    }
+
+    .revenue-horizon-label {
+        font-size: 13px;
+        font-weight: 400;
+        color: var(--recess-slate);
+        margin-bottom: 0.5rem;
+    }
+
+    .revenue-horizon-value {
+        font-size: 32px;
+        font-weight: 600;
+        color: var(--recess-charcoal);
+        line-height: 1.1;
+        margin-bottom: 0.75rem;
+    }
+
+    .revenue-horizon-target {
+        font-size: 13px;
+        color: var(--recess-slate);
+        margin-bottom: 0.5rem;
+    }
+
+    .revenue-horizon-yoy {
+        font-size: 13px;
+        font-weight: 500;
+        margin-top: 0.5rem;
+    }
+
+    .revenue-horizon-yoy.up {
+        color: var(--recess-forest);
+    }
+
+    .revenue-horizon-yoy.down {
+        color: var(--recess-burnt-orange);
+    }
+
+    .revenue-horizon-prior {
+        font-size: 12px;
+        color: var(--recess-slate);
+        margin-top: 0.125rem;
+    }
+
+    /* ===========================================
+       Reusable Progress Bar (NEW — 4px thin)
+       =========================================== */
+    .progress-bar {
+        width: 100%;
+        height: 4px;
+        background: var(--recess-silver);
+        border-radius: 4px;
+        overflow: hidden;
+        margin-top: 0.375rem;
+    }
+
+    .progress-bar-fill {
+        height: 100%;
+        background: var(--recess-aqua);
+        border-radius: 4px;
+        transition: width 0.4s ease;
+    }
+
+    .progress-pct {
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--recess-slate);
+        margin-left: 0.375rem;
+    }
+
+    /* ===========================================
+       Quarter Cards (NEW)
+       =========================================== */
+    .quarter-card {
+        background: var(--bg-white);
+        border: 1px solid var(--border-light);
+        border-radius: var(--radius-md);
+        padding: 14px 16px;
+        box-shadow: var(--shadow-sm);
+    }
+
+    .quarter-card.current {
+        border-left: 3px solid var(--recess-aqua);
+    }
+
+    .quarter-card.muted {
+        opacity: 0.55;
+    }
+
+    .quarter-label {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--recess-slate);
+        margin-bottom: 0.25rem;
+    }
+
+    .quarter-actual {
+        font-size: 20px;
+        font-weight: 600;
+        color: var(--recess-charcoal);
+        line-height: 1.2;
+    }
+
+    .quarter-target {
+        font-size: 12px;
+        color: var(--text-muted);
+        margin-bottom: 0.375rem;
+    }
+
+    /* ===========================================
+       Metric Cards
+       =========================================== */
     .metric-card {
         background: var(--bg-white);
         border: 1px solid var(--border-light);
         border-radius: var(--radius-md);
-        padding: 1.25rem;
+        padding: 20px;
         box-shadow: var(--shadow-sm);
         transition: all 0.2s ease;
         height: 100%;
+        position: relative;
     }
 
     .metric-card:hover {
@@ -471,13 +628,13 @@ st.markdown("""
         display: flex;
         justify-content: space-between;
         align-items: flex-start;
-        margin-bottom: 0.75rem;
+        margin-bottom: 0.5rem;
     }
 
     .metric-card-label {
-        font-size: 0.8125rem;
-        color: var(--text-secondary);
-        font-weight: 500;
+        font-size: 13px;
+        color: var(--recess-slate);
+        font-weight: 400;
     }
 
     .metric-card-icon {
@@ -490,7 +647,7 @@ st.markdown("""
         font-size: 1rem;
     }
 
-    .metric-card-icon.cyan { background: var(--recess-cyan-light); }
+    .metric-card-icon.cyan { background: var(--recess-aqua-light); }
     .metric-card-icon.orange { background: var(--recess-orange-light); }
     .metric-card-icon.success { background: var(--success-bg); }
     .metric-card-icon.warning { background: var(--warning-bg); }
@@ -502,14 +659,14 @@ st.markdown("""
         text-transform: uppercase;
         letter-spacing: 0.08em;
         color: var(--text-muted);
-        margin-bottom: 0.35rem;
+        margin-bottom: 0.25rem;
         font-weight: 600;
     }
 
     .metric-card-value {
-        font-size: 2rem;
-        font-weight: 700;
-        color: var(--text-primary);
+        font-size: 28px;
+        font-weight: 600;
+        color: var(--recess-charcoal);
         line-height: 1.1;
         margin-bottom: 0.5rem;
     }
@@ -522,42 +679,85 @@ st.markdown("""
         gap: 0.25rem;
     }
 
-    .metric-card-delta.positive { color: var(--success); }
-    .metric-card-delta.negative { color: var(--danger); }
+    .metric-card-delta.positive { color: var(--positive); }
+    .metric-card-delta.negative { color: var(--negative); }
     .metric-card-delta.neutral { color: var(--text-muted); }
 
-    /* Status Badge */
+    /* Target context line below status badge (NEW) */
+    .metric-card-context {
+        font-size: 12px;
+        color: var(--recess-slate);
+        margin-top: 0.5rem;
+    }
+
+    /* ===========================================
+       YoY Arrow Indicators (NEW)
+       =========================================== */
+    .yoy-arrow {
+        font-size: 12px;
+        font-weight: 500;
+        margin-top: 0.375rem;
+    }
+
+    .yoy-arrow.up {
+        color: var(--recess-forest);
+    }
+
+    .yoy-arrow.down {
+        color: var(--recess-burnt-orange);
+    }
+
+    /* ===========================================
+       Status Badge — small rounded pills
+       =========================================== */
     .status-badge {
         display: inline-flex;
         align-items: center;
-        gap: 0.375rem;
-        padding: 0.375rem 0.75rem;
+        gap: 0.25rem;
+        padding: 0.25rem 0.625rem;
         border-radius: 100px;
-        font-size: 0.75rem;
+        font-size: 0.6875rem;
         font-weight: 600;
     }
 
     .status-badge::before {
         content: '';
-        width: 6px;
-        height: 6px;
+        width: 5px;
+        height: 5px;
         border-radius: 50%;
     }
 
-    .status-badge.success { background: var(--success-bg); color: var(--success); }
-    .status-badge.success::before { background: var(--success); }
-    .status-badge.warning { background: var(--warning-bg); color: var(--warning); }
-    .status-badge.warning::before { background: var(--warning); }
-    .status-badge.danger { background: var(--danger-bg); color: var(--danger); }
-    .status-badge.danger::before { background: var(--danger); }
-    .status-badge.neutral { background: var(--bg-main); color: var(--text-muted); }
+    .status-badge.success {
+        background: var(--recess-aqua-light);
+        color: var(--recess-aqua);
+    }
+    .status-badge.success::before { background: var(--recess-aqua); }
+
+    .status-badge.warning {
+        background: var(--warning-bg);
+        color: var(--recess-burnt-orange);
+    }
+    .status-badge.warning::before { background: var(--recess-burnt-orange); }
+
+    .status-badge.danger {
+        background: var(--danger-bg);
+        color: var(--recess-danger);
+    }
+    .status-badge.danger::before { background: var(--recess-danger); }
+
+    .status-badge.neutral {
+        background: var(--bg-main);
+        color: var(--text-muted);
+    }
     .status-badge.neutral::before { background: var(--text-muted); }
 
-    /* Section Headers */
+    /* ===========================================
+       Section Headers — aqua left border accent
+       =========================================== */
     .section-header {
         font-size: 1.125rem;
         font-weight: 600;
-        color: var(--text-primary);
+        color: var(--recess-charcoal);
         margin: 2rem 0 1rem;
         display: flex;
         align-items: center;
@@ -568,11 +768,13 @@ st.markdown("""
         content: '';
         width: 4px;
         height: 1.25rem;
-        background: var(--recess-cyan);
+        background: var(--recess-aqua);
         border-radius: 2px;
     }
 
-    /* Team Table */
+    /* ===========================================
+       Team Table — slate header, clean white rows
+       =========================================== */
     .team-table {
         background: var(--bg-white);
         border: 1px solid var(--border-light);
@@ -582,13 +784,13 @@ st.markdown("""
     }
 
     .team-table-header {
-        background: var(--bg-main);
+        background: var(--recess-slate);
         padding: 0.75rem 1.25rem;
         font-size: 0.75rem;
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.05em;
-        color: var(--text-muted);
+        color: var(--recess-white);
         display: grid;
         grid-template-columns: 1fr 1.5fr 120px 120px 100px;
         gap: 1rem;
@@ -603,6 +805,7 @@ st.markdown("""
         border-bottom: 1px solid var(--border-light);
         align-items: center;
         transition: background 0.15s ease;
+        background: var(--bg-white);
     }
 
     .team-row:last-child {
@@ -610,12 +813,12 @@ st.markdown("""
     }
 
     .team-row:hover {
-        background: var(--bg-main);
+        background: var(--recess-snow);
     }
 
     .team-name {
         font-weight: 600;
-        color: var(--text-primary);
+        color: var(--recess-charcoal);
     }
 
     .team-dept {
@@ -624,34 +827,40 @@ st.markdown("""
     }
 
     .team-metric {
-        color: var(--text-secondary);
+        color: var(--recess-slate);
         font-size: 0.875rem;
     }
 
     .team-value {
         font-family: 'JetBrains Mono', monospace;
         font-weight: 600;
-        color: var(--text-primary);
+        color: var(--recess-charcoal);
+        text-align: right;
     }
 
     .team-target {
         font-family: 'JetBrains Mono', monospace;
         color: var(--text-muted);
         font-size: 0.875rem;
+        text-align: right;
     }
 
-    /* Department Detail */
+    /* ===========================================
+       Department Detail
+       =========================================== */
     .dept-summary {
-        background: var(--recess-cyan-light);
-        border-left: 4px solid var(--recess-cyan);
+        background: var(--recess-aqua-light);
+        border-left: 4px solid var(--recess-aqua);
         padding: 1rem 1.25rem;
         border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-        color: var(--text-primary);
+        color: var(--recess-charcoal);
         font-size: 0.9375rem;
         margin-bottom: 1.5rem;
     }
 
-    /* Info Icon Tooltip */
+    /* ===========================================
+       Info Icon Tooltip
+       =========================================== */
     .info-trigger {
         display: inline-flex;
         align-items: center;
@@ -670,7 +879,7 @@ st.markdown("""
     }
 
     .info-trigger:hover {
-        background: var(--recess-cyan);
+        background: var(--recess-aqua);
         color: white;
     }
 
@@ -680,7 +889,7 @@ st.markdown("""
         left: 50%;
         transform: translateX(-50%) translateY(4px);
         width: 300px;
-        background: var(--text-primary);
+        background: var(--recess-charcoal);
         color: white;
         padding: 1rem;
         border-radius: var(--radius-sm);
@@ -705,14 +914,14 @@ st.markdown("""
         left: 50%;
         transform: translateX(-50%);
         border: 6px solid transparent;
-        border-top-color: var(--text-primary);
+        border-top-color: var(--recess-charcoal);
     }
 
     .tooltip-label {
         font-size: 0.625rem;
         text-transform: uppercase;
         letter-spacing: 0.08em;
-        color: var(--recess-cyan);
+        color: var(--recess-aqua);
         margin-bottom: 0.25rem;
         font-weight: 600;
     }
@@ -735,7 +944,6 @@ st.markdown("""
         border-radius: 4px;
     }
 
-    /* Target & Benchmark row - compact pill-style display */
     .tooltip-context {
         display: flex;
         gap: 0.5rem;
@@ -755,9 +963,9 @@ st.markdown("""
     }
 
     .tooltip-pill.target {
-        background: rgba(19, 186, 213, 0.15);
+        background: rgba(20, 185, 214, 0.15);
         color: #5fd4e8;
-        border: 1px solid rgba(19, 186, 213, 0.25);
+        border: 1px solid rgba(20, 185, 214, 0.25);
     }
 
     .tooltip-pill.benchmark {
@@ -766,20 +974,21 @@ st.markdown("""
         border: 1px solid rgba(100, 116, 139, 0.3);
     }
 
-    /* Edge cases - amber warning callout */
     .tooltip-edge {
         font-size: 0.75rem;
         line-height: 1.4;
         font-style: italic;
         color: rgba(255, 255, 255, 0.85);
         padding: 0.375rem 0.5rem;
-        border-left: 2px solid #f59e0b;
+        border-left: 2px solid var(--recess-burnt-orange);
         margin-top: 0.5rem;
-        background: rgba(245, 158, 11, 0.08);
+        background: rgba(242, 121, 53, 0.08);
         border-radius: 0 4px 4px 0;
     }
 
-    /* Chart Styling */
+    /* ===========================================
+       Chart Styling
+       =========================================== */
     .chart-container {
         background: var(--bg-white);
         border: 1px solid var(--border-light);
@@ -791,11 +1000,13 @@ st.markdown("""
     .chart-title {
         font-size: 1rem;
         font-weight: 600;
-        color: var(--text-primary);
+        color: var(--recess-charcoal);
         margin-bottom: 1rem;
     }
 
-    /* Streamlit overrides */
+    /* ===========================================
+       Streamlit Overrides
+       =========================================== */
     .stRadio > div {
         flex-direction: column;
         gap: 0;
@@ -813,7 +1024,6 @@ st.markdown("""
         max-width: 100%;
     }
 
-    /* Alert styling */
     .stAlert {
         background: var(--bg-white);
         border: 1px solid var(--border-light);
@@ -821,285 +1031,8 @@ st.markdown("""
     }
 
     /* ===========================================
-       RESPONSIVE MOBILE OPTIMIZATION
+       Metric Verification Badge
        =========================================== */
-
-    /* Tablet: 768px - 1024px */
-    @media screen and (max-width: 1024px) {
-        .block-container {
-            padding: 1rem 1.5rem 2rem;
-        }
-
-        .page-header {
-            padding: 1.25rem 1.5rem;
-            flex-wrap: wrap;
-            gap: 1rem;
-        }
-
-        .page-title {
-            font-size: 1.5rem;
-        }
-
-        .north-star-value {
-            font-size: 2.75rem;
-        }
-
-        .metric-card-value {
-            font-size: 1.75rem;
-        }
-
-        /* Team table - reduce column widths */
-        .team-table-header,
-        .team-row {
-            grid-template-columns: 1fr 1.2fr 100px 100px 90px;
-            gap: 0.75rem;
-            padding: 0.75rem 1rem;
-        }
-    }
-
-    /* Mobile: < 768px */
-    @media screen and (max-width: 767px) {
-        /* Main container - tighter padding */
-        .block-container {
-            padding: 0.5rem 0.75rem 1.5rem;
-            max-width: 100% !important;
-        }
-
-        /* HIDE page header on mobile - maximize above-fold content */
-        .page-header {
-            display: none !important;
-        }
-
-        /* Hide sidebar collapse button - keep sidebar always visible */
-        [data-testid="stSidebarCollapseButton"] {
-            display: none !important;
-        }
-
-        /* Style the expand button (shown if sidebar somehow gets collapsed) */
-        [data-testid="stSidebarCollapsedControl"] {
-            position: fixed;
-            top: 0.5rem;
-            left: 0.5rem;
-            z-index: 999999;
-            background: var(--recess-cyan) !important;
-            border-radius: var(--radius-sm) !important;
-            padding: 0.5rem !important;
-            box-shadow: var(--shadow-md);
-        }
-
-        [data-testid="stSidebarCollapsedControl"] button {
-            color: white !important;
-            background: transparent !important;
-            border: none !important;
-        }
-
-        [data-testid="stSidebarCollapsedControl"] svg {
-            fill: white !important;
-            stroke: white !important;
-        }
-
-        /* Hide "Extensions" label Streamlit adds */
-        [data-testid="stSidebarCollapsedControl"] span {
-            display: none !important;
-        }
-
-        /* Mobile header bar - shows logo inline */
-        .mobile-header {
-            display: flex !important;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0.75rem 0.5rem 0.75rem 3rem;
-            margin: -0.5rem -0.75rem 0.75rem -0.75rem;
-            background: var(--bg-white);
-            border-bottom: 1px solid var(--border-light);
-        }
-
-        .mobile-header-logo {
-            font-size: 1.125rem;
-            font-weight: 700;
-            color: var(--recess-cyan);
-        }
-
-        .mobile-header-date {
-            font-size: 0.6875rem;
-            color: var(--text-muted);
-            font-family: 'JetBrains Mono', monospace;
-        }
-
-        /* Section header - tighter on mobile */
-        .section-header:first-of-type {
-            margin-top: 0.5rem;
-        }
-    }
-
-    /* Hide mobile header on desktop */
-    .mobile-header {
-        display: none;
-    }
-
-    /* Small mobile: < 480px */
-    @media screen and (max-width: 479px) {
-        .block-container {
-            padding: 0.5rem 0.75rem 1rem;
-        }
-
-        .page-header {
-            padding: 0.875rem;
-            margin: -0.5rem -0.75rem 0.75rem -0.75rem;
-        }
-
-        .page-title {
-            font-size: 1.25rem;
-        }
-
-        .north-star-card {
-            padding: 1rem;
-        }
-
-        .north-star-value {
-            font-size: 1.875rem;
-        }
-
-        .north-star-context {
-            font-size: 0.8125rem;
-        }
-
-        .metric-card {
-            padding: 0.875rem;
-        }
-
-        .metric-card-value {
-            font-size: 1.375rem;
-        }
-
-        .team-row {
-            padding: 0.875rem;
-        }
-
-        .info-trigger .tooltip {
-            width: 200px;
-            padding: 0.75rem;
-        }
-
-        .tooltip-text {
-            font-size: 0.75rem;
-        }
-
-        .tooltip-calc {
-            font-size: 0.6875rem;
-        }
-    }
-
-    /* Streamlit columns override for mobile */
-    @media screen and (max-width: 767px) {
-        /* Force 2-column grid for metric cards on mobile */
-        [data-testid="column"] {
-            width: calc(50% - 0.5rem) !important;
-            flex: none !important;
-            min-width: 0 !important;
-        }
-
-        /* Stack Streamlit's horizontal blocks */
-        .stHorizontalBlock {
-            flex-wrap: wrap !important;
-            gap: 0.75rem !important;
-        }
-
-        /* Full width for single items */
-        .stHorizontalBlock > [data-testid="column"]:only-child {
-            width: 100% !important;
-        }
-    }
-
-    @media screen and (max-width: 479px) {
-        /* Single column on very small screens */
-        [data-testid="column"] {
-            width: 100% !important;
-        }
-    }
-
-    /* Touch-friendly improvements */
-    @media (hover: none) and (pointer: coarse) {
-        /* Larger touch targets */
-        .nav-item {
-            min-height: 44px;
-            display: flex;
-            align-items: center;
-        }
-
-        .info-trigger {
-            width: 20px;
-            height: 20px;
-            font-size: 11px;
-        }
-
-        /* Tap to show tooltip instead of hover */
-        .info-trigger .tooltip {
-            pointer-events: auto;
-        }
-
-        .status-badge {
-            min-height: 28px;
-            display: inline-flex;
-            align-items: center;
-        }
-
-        /* Streamlit buttons */
-        .stButton > button {
-            min-height: 44px !important;
-            font-size: 0.875rem !important;
-        }
-    }
-
-    /* Landscape mobile optimization */
-    @media screen and (max-width: 896px) and (orientation: landscape) {
-        .north-star-card {
-            padding: 1rem 1.5rem;
-        }
-
-        .north-star-value {
-            font-size: 2rem;
-        }
-
-        [data-testid="column"] {
-            width: calc(25% - 0.75rem) !important;
-        }
-    }
-
-    /* High contrast / accessibility improvements */
-    @media (prefers-contrast: high) {
-        .metric-card {
-            border-width: 2px;
-        }
-
-        .status-badge {
-            font-weight: 700;
-        }
-
-        .team-row {
-            border-bottom-width: 2px;
-        }
-    }
-
-    /* Reduced motion preference */
-    @media (prefers-reduced-motion: reduce) {
-        .live-badge::before {
-            animation: none;
-        }
-
-        .nav-item,
-        .metric-card,
-        .info-trigger,
-        .info-trigger .tooltip {
-            transition: none;
-        }
-    }
-
-    /* Metric verification indicator on cards - badge in top right */
-    .metric-card {
-        position: relative;
-    }
-
     .metric-live-badge {
         position: absolute;
         top: 0.5rem;
@@ -1116,15 +1049,15 @@ st.markdown("""
     }
 
     .metric-live-badge.live {
-        background: var(--success-bg);
-        color: var(--success);
+        background: var(--positive-bg);
+        color: var(--positive);
     }
 
     .metric-live-badge.live::before {
         content: '';
         width: 5px;
         height: 5px;
-        background: var(--success);
+        background: var(--positive);
         border-radius: 50%;
     }
 
@@ -1159,7 +1092,9 @@ st.markdown("""
         color: var(--text-muted);
     }
 
-    /* Data Source Indicator - Fixed position bottom right */
+    /* ===========================================
+       Data Source Indicator
+       =========================================== */
     .data-source-indicator {
         position: fixed;
         bottom: 1rem;
@@ -1177,9 +1112,9 @@ st.markdown("""
     }
 
     .data-source-indicator.live {
-        background: var(--success-bg);
-        color: var(--success);
-        border: 1px solid var(--success);
+        background: var(--positive-bg);
+        color: var(--positive);
+        border: 1px solid var(--positive);
     }
 
     .data-source-indicator.mock {
@@ -1197,7 +1132,7 @@ st.markdown("""
         bottom: calc(100% + 8px);
         right: 0;
         width: 220px;
-        background: var(--text-primary);
+        background: var(--recess-charcoal);
         color: white;
         padding: 0.75rem;
         border-radius: var(--radius-sm);
@@ -1219,15 +1154,285 @@ st.markdown("""
         top: 100%;
         right: 1rem;
         border: 6px solid transparent;
-        border-top-color: var(--text-primary);
+        border-top-color: var(--recess-charcoal);
     }
 
+    /* ===========================================
+       RESPONSIVE MOBILE OPTIMIZATION
+       =========================================== */
+
+    /* Tablet: 768px - 1024px */
+    @media screen and (max-width: 1024px) {
+        .block-container {
+            padding: 1rem 1.5rem 2rem;
+        }
+
+        .page-header {
+            padding: 1.25rem 1.5rem;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .page-title {
+            font-size: 1.25rem;
+        }
+
+        .north-star-value {
+            font-size: 2rem;
+        }
+
+        .metric-card-value {
+            font-size: 22px;
+        }
+
+        .revenue-horizon-value {
+            font-size: 24px;
+        }
+
+        .team-table-header,
+        .team-row {
+            grid-template-columns: 1fr 1.2fr 100px 100px 90px;
+            gap: 0.75rem;
+            padding: 0.75rem 1rem;
+        }
+    }
+
+    /* Mobile: < 768px */
     @media screen and (max-width: 767px) {
+        .block-container {
+            padding: 0.5rem 0.75rem 1.5rem;
+            max-width: 100% !important;
+        }
+
+        .page-header {
+            display: none !important;
+        }
+
+        [data-testid="stSidebarCollapseButton"] {
+            display: none !important;
+        }
+
+        [data-testid="stSidebarCollapsedControl"] {
+            position: fixed;
+            top: 0.5rem;
+            left: 0.5rem;
+            z-index: 999999;
+            background: var(--recess-aqua) !important;
+            border-radius: var(--radius-sm) !important;
+            padding: 0.5rem !important;
+            box-shadow: var(--shadow-md);
+        }
+
+        [data-testid="stSidebarCollapsedControl"] button {
+            color: white !important;
+            background: transparent !important;
+            border: none !important;
+        }
+
+        [data-testid="stSidebarCollapsedControl"] svg {
+            fill: white !important;
+            stroke: white !important;
+        }
+
+        [data-testid="stSidebarCollapsedControl"] span {
+            display: none !important;
+        }
+
+        .mobile-header {
+            display: flex !important;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.75rem 0.5rem 0.75rem 3rem;
+            margin: -0.5rem -0.75rem 0.75rem -0.75rem;
+            background: var(--bg-white);
+            border-bottom: 1px solid var(--border-light);
+        }
+
+        .mobile-header-logo {
+            font-size: 1.125rem;
+            font-weight: 700;
+            color: var(--recess-aqua);
+        }
+
+        .mobile-header-date {
+            font-size: 0.6875rem;
+            color: var(--text-muted);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .section-header:first-of-type {
+            margin-top: 0.5rem;
+        }
+
         .data-source-indicator {
             bottom: 0.5rem;
             right: 0.5rem;
             padding: 0.375rem 0.5rem;
             font-size: 0.6875rem;
+        }
+    }
+
+    /* Hide mobile header on desktop */
+    .mobile-header {
+        display: none;
+    }
+
+    /* Small mobile: < 480px */
+    @media screen and (max-width: 479px) {
+        .block-container {
+            padding: 0.5rem 0.75rem 1rem;
+        }
+
+        .page-header {
+            padding: 0.875rem;
+            margin: -0.5rem -0.75rem 0.75rem -0.75rem;
+        }
+
+        .page-title {
+            font-size: 1.125rem;
+        }
+
+        .north-star-card {
+            padding: 1rem;
+        }
+
+        .north-star-value {
+            font-size: 1.875rem;
+        }
+
+        .north-star-context {
+            font-size: 0.8125rem;
+        }
+
+        .metric-card {
+            padding: 14px;
+        }
+
+        .metric-card-value {
+            font-size: 20px;
+        }
+
+        .revenue-horizon-value {
+            font-size: 22px;
+        }
+
+        .quarter-actual {
+            font-size: 16px;
+        }
+
+        .team-row {
+            padding: 0.875rem;
+        }
+
+        .info-trigger .tooltip {
+            width: 200px;
+            padding: 0.75rem;
+        }
+
+        .tooltip-text {
+            font-size: 0.75rem;
+        }
+
+        .tooltip-calc {
+            font-size: 0.6875rem;
+        }
+    }
+
+    /* Streamlit columns override for mobile */
+    @media screen and (max-width: 767px) {
+        [data-testid="column"] {
+            width: calc(50% - 0.5rem) !important;
+            flex: none !important;
+            min-width: 0 !important;
+        }
+
+        .stHorizontalBlock {
+            flex-wrap: wrap !important;
+            gap: 0.75rem !important;
+        }
+
+        .stHorizontalBlock > [data-testid="column"]:only-child {
+            width: 100% !important;
+        }
+    }
+
+    @media screen and (max-width: 479px) {
+        [data-testid="column"] {
+            width: 100% !important;
+        }
+    }
+
+    /* Touch-friendly improvements */
+    @media (hover: none) and (pointer: coarse) {
+        .nav-item {
+            min-height: 44px;
+            display: flex;
+            align-items: center;
+        }
+
+        .info-trigger {
+            width: 20px;
+            height: 20px;
+            font-size: 11px;
+        }
+
+        .info-trigger .tooltip {
+            pointer-events: auto;
+        }
+
+        .status-badge {
+            min-height: 28px;
+            display: inline-flex;
+            align-items: center;
+        }
+
+        .stButton > button {
+            min-height: 44px !important;
+            font-size: 0.875rem !important;
+        }
+    }
+
+    /* Landscape mobile optimization */
+    @media screen and (max-width: 896px) and (orientation: landscape) {
+        .north-star-card {
+            padding: 1rem 1.5rem;
+        }
+
+        .north-star-value {
+            font-size: 2rem;
+        }
+
+        [data-testid="column"] {
+            width: calc(25% - 0.75rem) !important;
+        }
+    }
+
+    /* High contrast / accessibility */
+    @media (prefers-contrast: high) {
+        .metric-card {
+            border-width: 2px;
+        }
+
+        .status-badge {
+            font-weight: 700;
+        }
+
+        .team-row {
+            border-bottom-width: 2px;
+        }
+    }
+
+    /* Reduced motion preference */
+    @media (prefers-reduced-motion: reduce) {
+        .live-badge::before {
+            animation: none;
+        }
+
+        .nav-item,
+        .metric-card,
+        .info-trigger,
+        .info-trigger .tooltip {
+            transition: none;
         }
     }
 </style>
@@ -1282,7 +1487,12 @@ def render_sidebar():
 
 
 def render_page_header(title, subtitle=""):
-    """Render the page header."""
+    """Render clean page header matching Recess brand."""
+    from data.data_layer import get_data_source_status
+    source = get_data_source_status()
+    badge_class = "live" if source.get("is_live") else "mock"
+    badge_text = "Live" if source.get("is_live") else "Mock Data"
+
     st.markdown(f'''
     <div class="page-header">
         <div>
@@ -1291,281 +1501,257 @@ def render_page_header(title, subtitle=""):
         </div>
         <div class="page-meta">
             <div class="page-date">{datetime.now().strftime("%B %d, %Y")}</div>
-            <div class="live-badge">Live Data</div>
+            <div class="live-badge {badge_class}">{badge_text}</div>
         </div>
     </div>
     ''', unsafe_allow_html=True)
 
 
-def render_north_star():
-    """Render the North Star revenue metric."""
-    revenue = COMPANY_METRICS["revenue_actual"]
-    target = COMPANY_METRICS["revenue_target"]
-    progress = (revenue / target) * 100
-    remaining = target - revenue
+def render_revenue_overview():
+    """Render revenue time horizons (month/quarter/YTD) + quarterly breakdown."""
+    horizons = get_revenue_time_horizons()
+    quarters = get_quarterly_revenue()
 
-    st.markdown(f'''
-    <div class="north-star-card">
-        <div class="north-star-label">⭐ North Star Metric</div>
-        <div class="north-star-value">${revenue/1_000_000:.2f}M</div>
-        <div class="north-star-context">
-            of ${target/1_000_000:.0f}M target · ${remaining/1_000_000:.2f}M remaining
-        </div>
-        <div class="north-star-progress">
-            <div class="north-star-progress-fill" style="width: {min(progress, 100):.0f}%"></div>
-        </div>
-        <div class="north-star-progress-meta">
-            <span>{progress:.1f}% to goal</span>
-            <span>FY 2026</span>
-        </div>
-    </div>
-    ''', unsafe_allow_html=True)
+    # --- Revenue Time Horizon Cards (3 cards) ---
+    cols = st.columns(3)
+    for i, (key, horizon) in enumerate(horizons.items()):
+        actual = horizon["actual"] or 0
+        target = horizon["target"] or 1
+        prior = horizon["prior_year"]
+        change = horizon["change_pct"]
+        progress = min((actual / target) * 100, 100) if target else 0
+
+        # Format values
+        if actual >= 1_000_000:
+            actual_str = f"${actual/1_000_000:.2f}M"
+        elif actual >= 1_000:
+            actual_str = f"${actual/1_000:.1f}K"
+        else:
+            actual_str = f"${actual:,.0f}"
+
+        if target >= 1_000_000:
+            target_str = f"${target/1_000_000:.1f}M"
+        elif target >= 1_000:
+            target_str = f"${target/1_000:.0f}K"
+        else:
+            target_str = f"${target:,.0f}"
+
+        # YoY arrow
+        yoy_html = ""
+        if change is not None and prior is not None:
+            arrow_class = "up" if change >= 0 else "down"
+            arrow_char = "\u2191" if change >= 0 else "\u2193"
+            if prior >= 1_000_000:
+                prior_str = f"${prior/1_000_000:.1f}M"
+            elif prior >= 1_000:
+                prior_str = f"${prior/1_000:.0f}K"
+            else:
+                prior_str = f"${prior:,.0f}"
+            yoy_html = f'''
+            <div class="revenue-horizon-yoy {arrow_class}">
+                {arrow_char} {abs(change)*100:.1f}% vs 2025
+            </div>
+            <div class="revenue-horizon-prior">{prior_str} last year</div>
+            '''
+
+        current_class = " current" if key == "quarter" else ""
+
+        with cols[i]:
+            st.markdown(f'''
+            <div class="revenue-horizon-card{current_class}">
+                <div class="revenue-horizon-label">{horizon["label"]}</div>
+                <div class="revenue-horizon-value">{actual_str}</div>
+                <div class="revenue-horizon-target">
+                    Target: {target_str}
+                    <div class="progress-bar">
+                        <div class="progress-bar-fill" style="width: {progress:.0f}%"></div>
+                    </div>
+                    <span class="progress-pct">{progress:.1f}%</span>
+                </div>
+                {yoy_html}
+            </div>
+            ''', unsafe_allow_html=True)
+
+    # --- Quarterly Breakdown (4 compact cards) ---
+    st.markdown('<div style="height: 0.75rem;"></div>', unsafe_allow_html=True)
+    q_cols = st.columns(4)
+    for i, q in enumerate(quarters):
+        actual = q["actual"]
+        target = q["target"] or 0
+        is_current = q["is_current"]
+        status = q["status"]
+
+        if actual is not None and target > 0:
+            progress = min((actual / target) * 100, 100)
+            if actual >= 1_000_000:
+                actual_str = f"${actual/1_000_000:.2f}M"
+            elif actual >= 1_000:
+                actual_str = f"${actual/1_000:.1f}K"
+            else:
+                actual_str = f"${actual:,.0f}"
+        else:
+            progress = 0
+            actual_str = "\u2014"
+
+        if target >= 1_000_000:
+            target_str = f"${target/1_000_000:.1f}M"
+        elif target >= 1_000:
+            target_str = f"${target/1_000:.0f}K"
+        else:
+            target_str = f"${target:,.0f}"
+
+        current_class = " current" if is_current else ""
+        muted_class = " muted" if status == "future" else ""
+
+        with q_cols[i]:
+            st.markdown(f'''
+            <div class="quarter-card{current_class}{muted_class}">
+                <div class="quarter-label">{q["quarter"]}-26</div>
+                <div class="quarter-actual">{actual_str}</div>
+                <div class="quarter-target">/ {target_str}</div>
+                <div class="progress-bar">
+                    <div class="progress-bar-fill" style="width: {progress:.0f}%"></div>
+                </div>
+            </div>
+            ''', unsafe_allow_html=True)
 
 
 def render_health_metrics():
-    """Render company health metrics with 2025 reference values."""
+    """Render company health metrics with YoY comparison."""
     st.markdown('<div class="section-header">Company Health</div>', unsafe_allow_html=True)
 
-    # 2025 reference values (hardcoded for now - could come from BigQuery)
-    REF_2025 = {
-        "take_rate": 0.493,      # 49.3%
-        "demand_nrr": 0.222,     # 22.2% (2024 cohort in 2025)
-        "supply_nrr": 0.667,     # 66.7% (2024 suppliers in 2025)
-        "pipeline": None,        # N/A for prior year
-        "logo_retention": 0.26,  # 26%
-        "time_to_fulfill": 69,   # 69 days median (close to 100% spend)
-    }
+    yoy = get_yoy_metrics()
 
-    # Row 1: Core financial metrics (4 cards)
     metrics_row1 = [
         {
             "label": "Take Rate",
             "key": "Take Rate %",
             "value": COMPANY_METRICS["take_rate_actual"],
             "target": COMPANY_METRICS["take_rate_target"],
-            "ref_2025": REF_2025["take_rate"],
             "format": "percent",
-            "icon": "📈",
-            "icon_class": "cyan"
+            "yoy": yoy.get("take_rate", {}),
         },
         {
             "label": "Demand NRR",
-            "key": "NRR",
+            "key": "Demand NRR",
             "value": COMPANY_METRICS["nrr"],
             "target": COMPANY_METRICS["nrr_target"],
-            "ref_2025": REF_2025["demand_nrr"],
             "format": "percent",
-            "icon": "🔄",
-            "icon_class": "success"
+            "yoy": yoy.get("nrr", {}),
         },
         {
             "label": "Supply NRR",
             "key": "Supply NRR",
             "value": COMPANY_METRICS.get("supply_nrr", 0),
             "target": COMPANY_METRICS.get("supply_nrr_target", 1.10),
-            "ref_2025": REF_2025["supply_nrr"],
             "format": "percent",
-            "icon": "📦",
-            "icon_class": "orange"
+            "yoy": yoy.get("supply_nrr", {}),
         },
         {
-            "label": "Weighted Pipeline Coverage Gap",
+            "label": "Pipeline Coverage",
             "key": "Pipeline Coverage",
-            "value": COMPANY_METRICS.get("pipeline_weighted_coverage_gap", 0),
-            "target": 0,  # Target is 0 (no gap)
-            "ref_2025": None,
-            "format": "pipeline_gap",
-            "icon": "📊",
-            "icon_class": "success",
-            "show_pipeline_details": True,
-            "coverage_ratio": COMPANY_METRICS.get("pipeline_coverage", 0),
-            "higher_is_better": False,  # Lower gap = better (negative = surplus)
+            "value": COMPANY_METRICS.get("pipeline_coverage"),
+            "target": COMPANY_METRICS.get("pipeline_target"),
+            "format": "multiplier",
+            "yoy": yoy.get("pipeline_coverage", {}),
         },
     ]
 
-    # Row 2: Operational & retention metrics (4 cards)
     metrics_row2 = [
         {
             "label": "Days to Fulfill",
-            "key": "Time to Fulfill",
-            "value": COMPANY_METRICS.get("time_to_fulfill_median"),  # None if no 2026 data yet
+            "key": "Days to Fulfill",
+            "value": COMPANY_METRICS.get("time_to_fulfill_median"),
             "target": COMPANY_METRICS.get("time_to_fulfill_target", 60),
-            "ref_2025": REF_2025["time_to_fulfill"],
             "format": "days",
-            "icon": "⏱️",
-            "icon_class": "cyan",
-            "higher_is_better": False,  # Lower days = better
-            "no_data_message": "No contracts fully spent",
+            "higher_is_better": False,
+            "yoy": yoy.get("time_to_fulfill", {}),
         },
         {
             "label": "Logo Retention",
             "key": "Logo Retention",
             "value": COMPANY_METRICS["logo_retention"],
             "target": COMPANY_METRICS["logo_retention_target"],
-            "ref_2025": REF_2025["logo_retention"],
             "format": "percent",
-            "icon": "🏢",
-            "icon_class": "warning"
-        },
-        {
-            "label": "Sellable Inventory",
-            "key": "Sellable Inventory",
-            "value": None,  # Not implemented yet
-            "target": None,
-            "ref_2025": None,
-            "format": "number",
-            "icon": "📋",
-            "icon_class": "neutral",
-            "status_override": ("neutral", "Needs PRD"),
+            "yoy": yoy.get("logo_retention", {}),
         },
         {
             "label": "Customer Count",
             "key": "Customer Count",
             "value": COMPANY_METRICS.get("customer_count", 51),
             "target": COMPANY_METRICS.get("customer_count_target", 75),
-            "ref_2025": 51,  # 2025 had 51 active customers
             "format": "number",
-            "icon": "👥",
-            "icon_class": "success"
+            "yoy": yoy.get("customer_count", {}),
+        },
+        {
+            "label": "Customer Concentration",
+            "key": "Customer Concentration",
+            "value": COMPANY_METRICS.get("concentration_top1"),
+            "target": 0.30,
+            "format": "percent",
+            "higher_is_better": False,
+            "yoy": {},
         },
     ]
 
-    # Helper function to render a metric card
-    def render_metric_card(m, col):
+    def render_metric_card_v2(m, col):
         val = m["value"]
         tgt = m["target"]
-        ref = m.get("ref_2025")
         fmt = m["format"]
         higher_is_better = m.get("higher_is_better", True)
+        yoy_data = m.get("yoy", {})
 
-        # Format current value based on format type
-        if val is None:
-            val_str = m.get("no_data_message", "—")
-        elif fmt == "percent":
-            val_str = f"{val*100:.0f}%"
-        elif fmt == "multiplier":
-            val_str = f"{val:.1f}x"
-        elif fmt == "days":
-            val_str = f"{int(val)} days"
-        elif fmt == "number":
-            val_str = f"{int(val):,}"
-        elif fmt == "pipeline_gap":
-            # Show gap amount with coverage ratio: "$4.2M (3.8x)"
-            coverage = m.get("coverage_ratio", 0)
-            val_str = f"${abs(val)/1_000_000:.1f}M ({coverage:.1f}x)"
-        else:
-            val_str = str(val)
+        # Format value
+        val_str = format_value(val, fmt) if val is not None else "\u2014"
 
-        # Format 2025 reference value
-        if ref is None:
-            ref_str = "—"
-        elif fmt == "percent":
-            ref_str = f"{ref*100:.0f}%"
-        elif fmt == "multiplier":
-            ref_str = f"{ref:.1f}x"
-        elif fmt == "days":
-            ref_str = f"{int(ref)} days"
-        elif fmt == "number":
-            ref_str = f"{int(ref):,}"
-        else:
-            ref_str = str(ref)
-
-        # Get status - check for override first
-        if "status_override" in m:
-            status_class, status_label = m["status_override"]
-        elif val is None or tgt is None:
+        # Status
+        if val is None or tgt is None:
             status_class, status_label = "neutral", "No Data"
         else:
             status_class, status_label = get_status_info(val, tgt, higher_is_better)
 
-        tooltip = get_metric_tooltip(m["key"])
+        # Target context
         target_info = get_metric_target(m["key"])
-
-        # Build enriched tooltip HTML — target from Settings, benchmark from METRIC_DEFINITIONS
-        edge_html = ""
-        if tooltip.get("edge_cases"):
-            edge_html = f'<div class="tooltip-label">\u26a0 Edge Cases</div><div class="tooltip-edge">{tooltip["edge_cases"]}</div>'
-
-        context_pills = ""
-        pills = []
+        target_line = ""
         if target_info:
-            pills.append(f'<span class="tooltip-pill target">\U0001f3af Target: {target_info["display"]}</span>')
-        if tooltip.get("benchmark_2025"):
-            pills.append(f'<span class="tooltip-pill benchmark">\U0001f4ca 2025: {tooltip["benchmark_2025"]}</span>')
-        if pills:
-            context_pills = f'<div class="tooltip-context">{"".join(pills)}</div>'
+            target_line = f'Target: {target_info["display"]}'
 
-        tooltip_html = f'''<div class="tooltip"><div class="tooltip-label">Definition</div><div class="tooltip-text">{tooltip["definition"]}</div><div class="tooltip-label">Why It Matters</div><div class="tooltip-text">{tooltip["importance"]}</div><div class="tooltip-label">Calculation</div><div class="tooltip-calc">{tooltip["calculation"]}</div>{context_pills}{edge_html}</div>'''
-
-        # Get verification status
-        verification = get_metric_verification(m["key"])
-        bq_ok = verification.get("bq", False)
-        fn_ok = verification.get("fn", False)
-        confirmed = verification.get("confirmed", False)
-
-        # Build verification badge
-        needs_review = verification.get("needs_review", False)
-        if needs_review:
-            badge_class = "review"
-            badge_text = verification.get("note", "Needs Review")
-        elif bq_ok and fn_ok:
-            badge_class = "live"
-            badge_text = "Live"
-        else:
-            badge_class = "pending"
-            badge_text = verification.get("note", "Pending")
+        # YoY arrow
+        yoy_html = ""
+        change = yoy_data.get("change_pct")
+        prior = yoy_data.get("prior")
+        if change is not None:
+            arrow_class = "up" if change >= 0 else "down"
+            arrow_char = "\u2191" if change >= 0 else "\u2193"
+            prior_str = format_value(prior, fmt) if prior is not None else "\u2014"
+            yoy_html = f'''
+            <div class="yoy-arrow {arrow_class}">
+                {arrow_char} {abs(change)*100:.1f}% vs 2025 &middot; {prior_str}
+            </div>
+            '''
 
         with col:
-            # Build sub-label: 2026 Target + 2025 Benchmark
-            lines = []
-            if target_info:
-                lines.append(f'\U0001f3af 2026 Target: <span style="color: #5fd4e8;">{target_info["display"]}</span>')
-            if ref:
-                lines.append(f'\U0001f4ca 2025: <span style="color: #94a3b8;">{ref_str}</span>')
-            if lines:
-                inner = "".join(f"<div>{line}</div>" for line in lines)
-                sub_label = f'<div style="font-size: 11px; color: #64748b; margin-top: 4px; line-height: 1.6;">{inner}</div>'
-            else:
-                sub_label = ""
-
-            # Special handling for Pipeline Coverage - show weighted pipeline and needed amount
-            if m.get("show_pipeline_details"):
-                goal = COMPANY_METRICS.get("pipeline_quarterly_goal", 0)
-                closed = COMPANY_METRICS.get("pipeline_closed_won", 0)
-                weighted = COMPANY_METRICS.get("pipeline_weighted", 0)
-                target = COMPANY_METRICS.get("pipeline_target", 6.0)
-                needed = target * (goal - closed)
-                sub_label = f'''<div style="font-size: 11px; color: #64748b; margin-top: 8px; line-height: 1.6;">
-                    <div>Weighted Pipeline: <b>${weighted/1_000_000:.2f}M</b></div>
-                    <div>Needed for {target:.0f}x: <b>${needed/1_000_000:.2f}M</b></div>
-                </div>'''
-
             st.markdown(f'''
             <div class="metric-card">
-                <div class="metric-live-badge {badge_class}">{badge_text}</div>
-                <div class="metric-card-header">
-                    <div class="metric-card-label">{m["label"]}<span class="info-trigger">i{tooltip_html}</span></div>
-                    <div class="metric-card-icon {m["icon_class"]}">{m["icon"]}</div>
-                </div>
-                <div class="metric-card-kicker">Current YTD</div>
+                <div class="metric-card-label">{m["label"]}</div>
                 <div class="metric-card-value">{val_str}</div>
                 <span class="status-badge {status_class}">{status_label}</span>
-                {sub_label}
+                {yoy_html}
+                <div class="metric-card-context">{target_line}</div>
             </div>
             ''', unsafe_allow_html=True)
 
     # Render Row 1
     cols = st.columns(4)
     for i, m in enumerate(metrics_row1):
-        render_metric_card(m, cols[i])
+        render_metric_card_v2(m, cols[i])
 
-    # Add spacing between rows
-    st.markdown('<div style="height: 1rem;"></div>', unsafe_allow_html=True)
+    st.markdown('<div style="height: 0.75rem;"></div>', unsafe_allow_html=True)
 
     # Render Row 2
     cols2 = st.columns(4)
     for i, m in enumerate(metrics_row2):
-        render_metric_card(m, cols2[i])
+        render_metric_card_v2(m, cols2[i])
 
 
 def render_metric_card_generic(metric: dict, col):
@@ -1648,22 +1834,20 @@ def render_metric_grid(metrics: list, columns: int = 4):
 
 
 def render_team_scorecard():
-    """Render the team scorecard table."""
+    """Render team scorecard in Recess table style."""
     st.markdown('<div class="section-header">Team Accountability</div>', unsafe_allow_html=True)
 
-    # Table header
     st.markdown('''
     <div class="team-table">
         <div class="team-table-header">
             <div>Team Member</div>
-            <div>Metric</div>
+            <div>Primary Metric</div>
             <div>Actual</div>
             <div>Target</div>
             <div>Status</div>
         </div>
     ''', unsafe_allow_html=True)
 
-    # Build rows
     rows_html = ""
     for person in PERSON_METRICS:
         actual = person["actual"]
@@ -1671,18 +1855,17 @@ def render_team_scorecard():
         fmt = person["format"]
         higher_is_better = person.get("higher_is_better", True)
 
-        actual_str = format_value(actual, fmt)
-        target_str = format_value(target, fmt) if target > 0 else "—"
-
+        actual_str = format_value(actual, fmt) if actual is not None else "\u2014"
+        target_str = format_value(target, fmt) if target else "\u2014"
         status_class, status_label = get_status_info(actual, target, higher_is_better)
 
         rows_html += f'''
         <div class="team-row">
             <div>
-                <div class="team-name">{person["name"]}</div>
-                <div class="team-dept">{person["department"]}</div>
+                <div class="team-name">{safe_html(person["name"])}</div>
+                <div class="team-dept">{safe_html(person["department"])}</div>
             </div>
-            <div class="team-metric">{person["metric_name"]}</div>
+            <div class="team-metric">{safe_html(person["metric_name"])}</div>
             <div class="team-value">{actual_str}</div>
             <div class="team-target">{target_str}</div>
             <div><span class="status-badge {status_class}">{status_label}</span></div>
@@ -1826,7 +2009,7 @@ def render_department_detail(dept_name):
 
 def render_ceo_dashboard():
     """Render the CEO / Biz Dev dashboard."""
-    render_north_star()
+    render_revenue_overview()
 
     coo_metrics = get_coo_metrics()
     metrics = [
@@ -3336,7 +3519,7 @@ def main():
 
     if page == 'overview':
         render_page_header("Company Overview", "Real-time performance across all departments")
-        render_north_star()
+        render_revenue_overview()
         render_health_metrics()
         render_team_scorecard()
     elif page == 'settings':

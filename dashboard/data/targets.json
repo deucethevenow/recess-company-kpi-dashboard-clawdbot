@@ -7,6 +7,26 @@
     "pipeline_target": 6.0,
     "logo_retention_target": 0.5
   },
+  "quarterly_targets": {
+    "2026": {
+      "revenue": {
+        "Q1": 897900, "Q2": 1200000, "Q3": 1400000, "Q4": 1100000,
+        "annual": 4600000
+      },
+      "take_rate": {
+        "Q1": 0.43, "Q2": 0.51, "Q3": 0.51, "Q4": 0.50,
+        "annual": 0.49
+      },
+      "bookings": {
+        "Q1": 2900000, "Q2": 3300000, "Q3": 3000000, "Q4": 2100000,
+        "annual": 11200000
+      },
+      "gmv": {
+        "Q1": 2100000, "Q2": 2300000, "Q3": 2700000, "Q4": 2200000,
+        "annual": 9300000
+      }
+    }
+  },
   "people": {
     "Jack": {
       "metric_name": "Revenue vs Target",
