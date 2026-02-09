@@ -910,7 +910,7 @@ DEPARTMENT_DETAILS = {
             {"name": "Contract Spend %", "value": 0.89, "target": 0.95, "format": "percent"},
             {"name": "NPS Score", "value": 0.71, "target": 0.75, "format": "percent"},
             {"name": "Offer Acceptance %", "value": 0.88, "target": 0.90, "format": "percent"},
-            {"name": "Avg Ticket Response", "value": 16.3, "target": 16, "format": "hours", "higher_is_better": False},
+            {"name": "Avg Ticket Response", "value": None, "target": 16, "format": "hours", "higher_is_better": False, "missing_query": True},
         ],
     },
     "Marketing": {
@@ -1212,14 +1212,21 @@ def _get_dept_metric_meta(dept: str, metric_name: str) -> Dict[str, Any]:
 def _build_metric(dept: str, metric_name: str, value: Optional[float]) -> Dict[str, Any]:
     """Build a metric dict with metadata, preferring live values when provided."""
     meta = _get_dept_metric_meta(dept, metric_name)
-    return {
+    resolved_value = value if value is not None else meta.get("value")
+    metric = {
         "label": metric_name,
         "tooltip_key": metric_name,
-        "value": value if value is not None else meta.get("value"),
+        "value": resolved_value,
         "target": meta.get("target"),
         "format": meta.get("format", "number"),
         "higher_is_better": meta.get("higher_is_better", True),
     }
+
+    if meta.get("missing_query") and resolved_value is None:
+        metric["status_override"] = ("neutral", "Missing Query")
+        metric["placeholder"] = "—"
+
+    return metric
 
 
 # =============================================================================
@@ -1257,19 +1264,23 @@ def get_demand_am_metrics() -> List[Dict[str, Any]]:
     dept = "Demand AM"
     contract_spend = None
     nps = None
+    offer_acceptance = None
+    avg_ticket_response = None
 
     if USE_BIGQUERY and _bigquery_available:
         try:
             contract_spend = bq.get_contract_spend_pct()
             nps = bq.get_nps_score()
+            offer_acceptance = bq.get_offer_acceptance_rate()
+            avg_ticket_response = bq.get_avg_ticket_response_time()
         except Exception as e:
             logger.warning("Failed to fetch Demand AM metrics from BQ: %s", e)
 
     return [
         _build_metric(dept, "Contract Spend %", contract_spend),
         _build_metric(dept, "NPS Score", nps),
-        _build_metric(dept, "Offer Acceptance %", None),
-        _build_metric(dept, "Avg Ticket Response", None),
+        _build_metric(dept, "Offer Acceptance %", offer_acceptance),
+        _build_metric(dept, "Avg Ticket Response", avg_ticket_response),
     ]
 
 
@@ -1299,6 +1310,26 @@ def get_marketing_metrics() -> List[Dict[str, Any]]:
     ]
 
 
+def get_marketing_funnel() -> List[Dict[str, Any]]:
+    """Get marketing leads funnel (ML → MQL → SQL)."""
+    if USE_BIGQUERY and _bigquery_available:
+        try:
+            return bq.get_marketing_leads_funnel()
+        except Exception as e:
+            logger.warning("Failed to fetch marketing funnel: %s", e)
+    return []
+
+
+def get_marketing_attribution() -> List[Dict[str, Any]]:
+    """Get marketing attribution by channel for closed-won deals."""
+    if USE_BIGQUERY and _bigquery_available:
+        try:
+            return bq.get_attribution_by_channel()
+        except Exception as e:
+            logger.warning("Failed to fetch marketing attribution: %s", e)
+    return []
+
+
 def get_accounting_metrics() -> List[Dict[str, Any]]:
     """Get Accounting metrics (BigQuery first, then fallback)."""
     dept = "Accounting"
@@ -1306,10 +1337,17 @@ def get_accounting_metrics() -> List[Dict[str, Any]]:
     invoice_collection = coo_metrics.get("invoice_collection_rate")
     overdue_count = coo_metrics.get("overdue_count")
     overdue_amount = coo_metrics.get("overdue_amount")
+    avg_days = None
+
+    if USE_BIGQUERY and _bigquery_available:
+        try:
+            avg_days = (bq.get_avg_days_to_collection(FISCAL_YEAR) or {}).get("avg_days_to_collect")
+        except Exception as e:
+            logger.warning("Failed to fetch avg days to collection: %s", e)
 
     return [
         _build_metric(dept, "Invoice Collection Rate", invoice_collection),
         _build_metric(dept, "Invoices Overdue", overdue_count),
         _build_metric(dept, "Overdue Amount", overdue_amount),
-        _build_metric(dept, "Avg Days to Collection", None),
+        _build_metric(dept, "Avg Days to Collection", avg_days),
     ]

@@ -38,14 +38,20 @@ def test_get_demand_am_metrics_bigquery(mock_bq):
 
     mock_bq.get_contract_spend_pct.return_value = 0.89
     mock_bq.get_nps_score.return_value = 0.71
+    mock_bq.get_offer_acceptance_rate.return_value = 0.88
+    mock_bq.get_avg_ticket_response_time.return_value = 12.5
 
     metrics = get_demand_am_metrics()
 
     contract = _metric_by_label(metrics, "Contract Spend %")
     nps = _metric_by_label(metrics, "NPS Score")
+    offer = _metric_by_label(metrics, "Offer Acceptance %")
+    response = _metric_by_label(metrics, "Avg Ticket Response")
 
     assert contract["value"] == 0.89
     assert nps["value"] == 0.71
+    assert offer["value"] == 0.88
+    assert response["value"] == 12.5
 
 
 @patch("data.data_layer._bigquery_available", True)

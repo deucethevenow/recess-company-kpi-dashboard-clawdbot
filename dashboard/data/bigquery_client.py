@@ -331,6 +331,55 @@ def get_overdue_invoices() -> Dict[str, Any]:
         return {}
 
 
+def get_avg_days_to_collection(fiscal_year: int = FISCAL_YEAR) -> Dict[str, Any]:
+    """Fetch average invoice collection time (days to collect).
+
+    Query: queries/coo-ops/avg-invoice-collection-time.sql
+
+    Returns:
+        Dict with avg_days_to_collect, median_days_to_collect, invoice_count
+    """
+    query = f"""
+    WITH paid_invoices AS (
+        SELECT
+            inv.id AS invoice_id,
+            inv.transaction_date AS invoice_created,
+            inv.due_date,
+            pmt.transaction_date AS payment_date,
+            EXTRACT(YEAR FROM inv.due_date) AS due_date_year,
+            DATE_DIFF(pmt.transaction_date, inv.transaction_date, DAY) AS days_to_collect
+        FROM `{PROJECT_ID}.src_fivetran_qbo.invoice` inv
+        JOIN `{PROJECT_ID}.src_fivetran_qbo.payment_line` pl
+            ON inv.id = pl.invoice_id
+        JOIN `{PROJECT_ID}.src_fivetran_qbo.payment` pmt
+            ON pl.payment_id = pmt.id
+        WHERE inv._fivetran_deleted = FALSE
+          AND pmt._fivetran_deleted = FALSE
+          AND inv.balance = 0
+          AND EXTRACT(YEAR FROM inv.due_date) = {fiscal_year}
+    )
+    SELECT
+        COUNT(*) AS invoices_paid,
+        ROUND(AVG(days_to_collect), 1) AS avg_days_to_collect,
+        ROUND(APPROX_QUANTILES(days_to_collect, 100)[OFFSET(50)], 1) AS median_days_to_collect
+    FROM paid_invoices
+    """
+    try:
+        client = get_client()
+        result = list(client.query(query).result())
+        if result:
+            row = result[0]
+            return {
+                "avg_days_to_collect": float(row.avg_days_to_collect) if row.avg_days_to_collect else None,
+                "median_days_to_collect": float(row.median_days_to_collect) if row.median_days_to_collect else None,
+                "invoice_count": int(row.invoices_paid) if row.invoices_paid else 0,
+            }
+        return {}
+    except GoogleCloudError as e:
+        logger.error("Failed to fetch avg days to collect: %s", e)
+        return {}
+
+
 def get_working_capital() -> Dict[str, Any]:
     """Fetch working capital from QuickBooks balance sheet.
 
@@ -1419,6 +1468,67 @@ def get_contract_spend_pct() -> Optional[float]:
         return None
 
 
+def get_offer_acceptance_rate() -> Optional[float]:
+    """Fetch company-wide offer acceptance rate.
+
+    Uses MongoDB offers linked to HubSpot owners; computes YTD
+    acceptance rate across all AMs.
+
+    Query source: queries/demand-am/offer-acceptance-rate.sql
+
+    Returns:
+        Acceptance rate as decimal or None if query fails
+    """
+    query = f"""
+    WITH offer_outcomes AS (
+      SELECT
+        off.aasm_state,
+        EXTRACT(YEAR FROM off.created_at) as offer_year
+      FROM `{PROJECT_ID}.mongodb.offers` off
+      WHERE off.aasm_state IN ('accepted', 'denied', 'ignored')
+    )
+    SELECT
+      SAFE_DIVIDE(
+        COUNTIF(aasm_state = 'accepted'),
+        COUNT(*)
+      ) AS acceptance_rate
+    FROM offer_outcomes
+    WHERE offer_year = EXTRACT(YEAR FROM CURRENT_DATE())
+    """
+    try:
+        client = get_client()
+        result = list(client.query(query).result())
+        if result and result[0].acceptance_rate is not None:
+            return float(result[0].acceptance_rate)
+        return None
+    except GoogleCloudError as e:
+        logger.error("Failed to fetch offer acceptance rate: %s", e)
+        return None
+
+
+def get_avg_ticket_response_time() -> Optional[float]:
+    """Fetch average ticket response time in hours.
+
+    Query source: queries/demand-am/avg-ticket-response-time.sql
+
+    Returns:
+        Average response time in hours or None if query unavailable
+    """
+    query = f"""
+    SELECT
+      NULL AS avg_response_hours
+    """
+    try:
+        client = get_client()
+        result = list(client.query(query).result())
+        if result and result[0].avg_response_hours is not None:
+            return float(result[0].avg_response_hours)
+        return None
+    except GoogleCloudError as e:
+        logger.error("Failed to fetch avg ticket response time: %s", e)
+        return None
+
+
 def get_time_to_fulfill() -> Dict[str, Any]:
     """Fetch time to fulfill contract spend metrics.
 
@@ -1843,6 +1953,176 @@ def get_mql_to_sql_conversion() -> Dict[str, Any]:
     except GoogleCloudError as e:
         logger.error("Failed to fetch MQL to SQL conversion: %s", e)
         return {}
+
+
+def get_marketing_leads_funnel() -> List[Dict[str, Any]]:
+    """Fetch marketing leads funnel stages (ML → MQL → SQL).
+
+    Query: queries/marketing/marketing-leads-funnel.sql
+
+    Returns:
+        List of dicts with funnel_stage, contact_count, pct_of_top_funnel,
+        and stage_conversion_rate
+    """
+    query = f"""
+    WITH lead_stages AS (
+        SELECT
+            c.id AS contact_id,
+            c.property_hs_analytics_source AS source,
+            c.property_createdate AS contact_created,
+            c.property_became_marketing_qualified_lead_date AS mql_date,
+            c.property_became_sales_qualified_lead_date AS sql_date,
+            CASE
+                WHEN c.property_became_sales_qualified_lead_date IS NOT NULL THEN 'SQL'
+                WHEN c.property_became_marketing_qualified_lead_date IS NOT NULL THEN 'MQL'
+                WHEN c.property_hs_analytics_source IN (
+                    'DIRECT_TRAFFIC', 'PAID_SEARCH', 'PAID_SOCIAL', 'ORGANIC_SOCIAL',
+                    'ORGANIC_SEARCH', 'EVENT', 'EMAIL_MARKETING', 'OTHER_CAMPAIGNS',
+                    'REFERRALS', 'GENERAL_REFERRAL'
+                ) THEN 'ML'
+                ELSE 'Non-Marketing'
+            END AS funnel_stage
+        FROM `{PROJECT_ID}.src_fivetran_hubspot.contact` c
+        WHERE EXTRACT(YEAR FROM c.property_createdate) = EXTRACT(YEAR FROM CURRENT_DATE())
+    )
+    SELECT
+        funnel_stage,
+        COUNT(*) AS contact_count,
+        CASE funnel_stage
+            WHEN 'ML' THEN 100.0
+            WHEN 'MQL' THEN ROUND(COUNT(*) * 100.0 /
+                (SELECT COUNT(*) FROM lead_stages WHERE funnel_stage IN ('ML', 'MQL', 'SQL')), 1)
+            WHEN 'SQL' THEN ROUND(COUNT(*) * 100.0 /
+                (SELECT COUNT(*) FROM lead_stages WHERE funnel_stage IN ('ML', 'MQL', 'SQL')), 1)
+        END AS pct_of_top_funnel,
+        CASE
+            WHEN funnel_stage = 'ML' THEN
+                ROUND((SELECT COUNT(*) FROM lead_stages WHERE funnel_stage = 'MQL') * 100.0 /
+                      NULLIF(COUNT(*), 0), 1)
+            WHEN funnel_stage = 'MQL' THEN
+                ROUND((SELECT COUNT(*) FROM lead_stages WHERE funnel_stage = 'SQL') * 100.0 /
+                      NULLIF(COUNT(*), 0), 1)
+            ELSE NULL
+        END AS stage_conversion_rate
+    FROM lead_stages
+    WHERE funnel_stage != 'Non-Marketing'
+    GROUP BY funnel_stage
+    ORDER BY
+        CASE funnel_stage
+            WHEN 'ML' THEN 1
+            WHEN 'MQL' THEN 2
+            WHEN 'SQL' THEN 3
+        END
+    """
+    try:
+        client = get_client()
+        result = list(client.query(query).result())
+        return [
+            {
+                "funnel_stage": row.funnel_stage,
+                "contact_count": int(row.contact_count) if row.contact_count else 0,
+                "pct_of_top_funnel": float(row.pct_of_top_funnel) if row.pct_of_top_funnel else 0,
+                "stage_conversion_rate": float(row.stage_conversion_rate) if row.stage_conversion_rate else None,
+            }
+            for row in result
+        ]
+    except GoogleCloudError as e:
+        logger.error("Failed to fetch marketing leads funnel: %s", e)
+        return []
+
+
+def get_attribution_by_channel() -> List[Dict[str, Any]]:
+    """Fetch marketing attribution by channel for closed-won deals.
+
+    Query: queries/marketing/attribution-by-channel.sql
+
+    Returns:
+        List of dicts with channel, channel_group, deal_count,
+        first_touch_revenue, last_touch_revenue, total_attributed_revenue,
+        pct_of_total
+    """
+    query = f"""
+    WITH marketing_channels AS (
+        SELECT channel, channel_group FROM (
+            SELECT 'DIRECT_TRAFFIC' AS channel, 'Direct' AS channel_group UNION ALL
+            SELECT 'PAID_SEARCH', 'Paid' UNION ALL
+            SELECT 'PAID_SOCIAL', 'Paid' UNION ALL
+            SELECT 'ORGANIC_SOCIAL', 'Organic' UNION ALL
+            SELECT 'ORGANIC_SEARCH', 'Organic' UNION ALL
+            SELECT 'EVENT', 'Events' UNION ALL
+            SELECT 'EMAIL_MARKETING', 'Email' UNION ALL
+            SELECT 'OTHER_CAMPAIGNS', 'Campaigns' UNION ALL
+            SELECT 'REFERRALS', 'Referral' UNION ALL
+            SELECT 'GENERAL_REFERRAL', 'Referral'
+        )
+    ),
+    closed_won_deals AS (
+        SELECT
+            d.deal_id,
+            SAFE_CAST(d.property_amount AS FLOAT64) AS deal_amount,
+            d.property_closedate AS close_date,
+            dc.contact_id
+        FROM `{PROJECT_ID}.src_fivetran_hubspot.deal` d
+        LEFT JOIN `{PROJECT_ID}.src_fivetran_hubspot.deal_contact` dc
+            ON d.deal_id = dc.deal_id
+        WHERE d.property_hs_is_closed_won = TRUE
+          AND EXTRACT(YEAR FROM d.property_closedate) = EXTRACT(YEAR FROM CURRENT_DATE())
+    ),
+    deal_attribution AS (
+        SELECT
+            cwd.deal_id,
+            cwd.deal_amount,
+            c.property_hs_analytics_source AS first_touch,
+            c.property_hs_analytics_source AS last_touch,
+            CASE
+                WHEN c.property_hs_analytics_source IN (SELECT channel FROM marketing_channels)
+                THEN cwd.deal_amount * 0.5
+                ELSE 0
+            END AS first_touch_amount,
+            CASE
+                WHEN c.property_hs_analytics_source IN (SELECT channel FROM marketing_channels)
+                THEN cwd.deal_amount * 0.5
+                ELSE 0
+            END AS last_touch_amount
+        FROM closed_won_deals cwd
+        LEFT JOIN `{PROJECT_ID}.src_fivetran_hubspot.contact` c
+            ON cwd.contact_id = c.id
+    )
+    SELECT
+        COALESCE(da.first_touch, 'Unknown') AS channel,
+        mc.channel_group,
+        COUNT(DISTINCT da.deal_id) AS deal_count,
+        SUM(da.first_touch_amount) AS first_touch_revenue,
+        SUM(da.last_touch_amount) AS last_touch_revenue,
+        SUM(da.first_touch_amount + da.last_touch_amount) AS total_attributed_revenue,
+        ROUND(
+            SUM(da.first_touch_amount + da.last_touch_amount) * 100.0 /
+            NULLIF((SELECT SUM(first_touch_amount + last_touch_amount) FROM deal_attribution), 0),
+            1
+        ) AS pct_of_total
+    FROM deal_attribution da
+    LEFT JOIN marketing_channels mc ON da.first_touch = mc.channel
+    GROUP BY da.first_touch, mc.channel_group
+    ORDER BY total_attributed_revenue DESC
+    """
+    try:
+        client = get_client()
+        result = list(client.query(query).result())
+        return [
+            {
+                "channel": row.channel,
+                "channel_group": row.channel_group,
+                "deal_count": int(row.deal_count) if row.deal_count else 0,
+                "first_touch_revenue": float(row.first_touch_revenue) if row.first_touch_revenue else 0,
+                "last_touch_revenue": float(row.last_touch_revenue) if row.last_touch_revenue else 0,
+                "total_attributed_revenue": float(row.total_attributed_revenue) if row.total_attributed_revenue else 0,
+                "pct_of_total": float(row.pct_of_total) if row.pct_of_total else 0,
+            }
+            for row in result
+        ]
+    except GoogleCloudError as e:
+        logger.error("Failed to fetch attribution by channel: %s", e)
+        return []
 
 
 # =============================================================================

@@ -51,6 +51,8 @@ from data.data_layer import (
     get_demand_sales_metrics,
     get_demand_am_metrics,
     get_marketing_metrics,
+    get_marketing_funnel,
+    get_marketing_attribution,
     get_accounting_metrics,
 )
 from data.targets_manager import (
@@ -2063,6 +2065,8 @@ def render_demand_sales_dashboard():
             "icon": icon_map.get(m.get("format"), "📊"),
             "icon_class": "cyan",
             "higher_is_better": m.get("higher_is_better", True),
+            "status_override": m.get("status_override"),
+            "placeholder": m.get("placeholder"),
         })
     render_metric_grid(metrics, columns=4)
 
@@ -2142,6 +2146,8 @@ def render_accounting_dashboard():
             "icon": icon_map.get(m.get("format"), "📊"),
             "icon_class": "cyan",
             "higher_is_better": m.get("higher_is_better", True),
+            "status_override": m.get("status_override"),
+            "placeholder": m.get("placeholder"),
         })
     metrics.append({
         "label": "Factoring Capacity",
@@ -2193,6 +2199,8 @@ def render_demand_am_dashboard():
             "icon": icon_map.get(m.get("format"), "📊"),
             "icon_class": "cyan",
             "higher_is_better": m.get("higher_is_better", True),
+            "status_override": m.get("status_override"),
+            "placeholder": m.get("placeholder"),
         })
     render_metric_grid(metrics, columns=4)
 
@@ -2272,14 +2280,80 @@ def render_marketing_dashboard():
             "icon": icon_map.get(m.get("format"), "📊"),
             "icon_class": "cyan",
             "higher_is_better": m.get("higher_is_better", True),
+            "status_override": m.get("status_override"),
+            "placeholder": m.get("placeholder"),
         })
     render_metric_grid(metrics, columns=4)
 
     st.markdown('<div class="section-header">Marketing Leads Funnel</div>', unsafe_allow_html=True)
-    st.info("📊 Funnel chart will populate once marketing funnel query is wired (Phase 1 data wiring).")
+    funnel_rows = get_marketing_funnel()
+    if funnel_rows:
+        stages = [row["funnel_stage"] for row in funnel_rows]
+        counts = [row["contact_count"] for row in funnel_rows]
+        conv = [row.get("stage_conversion_rate") for row in funnel_rows]
+
+        funnel_fig = go.Figure()
+        funnel_fig.add_trace(go.Bar(
+            x=stages,
+            y=counts,
+            text=[f"{c:,}" for c in counts],
+            textposition="auto",
+            marker_color="#13bad5",
+            name="Leads",
+        ))
+        funnel_fig.update_layout(
+            title=dict(text="Marketing Funnel (YTD)", x=0, font=dict(size=14, color="#1a1a2e")),
+            template="plotly_white",
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="#64748b", family="Inter, sans-serif", size=12),
+            margin=dict(l=0, r=0, t=40, b=0),
+            yaxis=dict(title="Contacts", gridcolor="#e2e8f0"),
+            height=320,
+            showlegend=False,
+        )
+        st.plotly_chart(funnel_fig, use_container_width=True, config={'displayModeBar': False})
+
+        # Conversion callouts
+        conversions = []
+        for stage, rate in zip(stages, conv):
+            if rate is not None and stage in ("ML", "MQL"):
+                conversions.append(f"{stage} → next: {rate:.0f}%")
+        if conversions:
+            st.markdown(
+                '<div class="dept-summary">' + " · ".join(conversions) + "</div>",
+                unsafe_allow_html=True,
+            )
+    else:
+        st.info("📊 Funnel data not available (Missing Query).")
 
     st.markdown('<div class="section-header">Attribution by Channel</div>', unsafe_allow_html=True)
-    st.info("📊 Channel attribution chart will populate once attribution query is wired (Phase 1 data wiring).")
+    attribution_rows = get_marketing_attribution()
+    if attribution_rows:
+        channels = [row["channel"] for row in attribution_rows][:10]
+        totals = [row["total_attributed_revenue"] for row in attribution_rows][:10]
+
+        attr_fig = go.Figure()
+        attr_fig.add_trace(go.Bar(
+            x=channels,
+            y=totals,
+            marker_color="#ff8900",
+            hovertemplate="<b>%{x}</b><br>$%{y:,.0f}<extra></extra>",
+        ))
+        attr_fig.update_layout(
+            title=dict(text="Top Channels by Attributed Revenue", x=0, font=dict(size=14, color="#1a1a2e")),
+            template="plotly_white",
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="#64748b", family="Inter, sans-serif", size=12),
+            margin=dict(l=0, r=0, t=40, b=0),
+            yaxis=dict(title="Attributed Revenue", gridcolor="#e2e8f0", tickformat="$,.0f"),
+            height=320,
+            showlegend=False,
+        )
+        st.plotly_chart(attr_fig, use_container_width=True, config={'displayModeBar': False})
+    else:
+        st.info("📊 Attribution data not available (Missing Query).")
 
 
 
