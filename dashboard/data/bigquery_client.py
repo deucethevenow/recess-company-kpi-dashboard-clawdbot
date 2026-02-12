@@ -1410,6 +1410,56 @@ def get_pipeline_coverage_by_owner(
         return []
 
 
+def get_pipeline_coverage_by_company(
+    quarter: Optional[str] = None
+) -> List[Dict[str, Any]]:
+    """Fetch pipeline coverage by company from the deployed view.
+
+    Queries the pipeline_coverage_by_company view and computes aggregate
+    coverage metrics across quota types (total quota, total weighted
+    pipeline, coverage gap, coverage ratio) for each company.
+
+    Args:
+        quarter: Optional quarter filter (Q1, Q2, Q3, Q4). Default: current quarter.
+
+    Returns:
+        List of dicts with company-level pipeline coverage, sorted by
+        coverage gap descending (biggest dollar shortfall first).
+    """
+    if quarter is None:
+        current_month = datetime.now().month
+        current_quarter = (current_month - 1) // 3 + 1
+        quarter = f"Q{current_quarter}"
+
+    valid_quarters = {"Q1", "Q2", "Q3", "Q4"}
+    if quarter not in valid_quarters:
+        logger.error("Invalid quarter: %s", quarter)
+        return []
+
+    query = f"""
+    SELECT *,
+        (new_cust_quarterly_quota + renewal_quarterly_quota + land_exp_quarterly_quota) as total_quarterly_quota,
+        (new_cust_hs_weighted + renewal_hs_weighted + land_exp_hs_weighted) as total_hs_weighted,
+        (new_cust_quarterly_quota + renewal_quarterly_quota + land_exp_quarterly_quota)
+            - (new_cust_hs_weighted + renewal_hs_weighted + land_exp_hs_weighted) as coverage_gap,
+        SAFE_DIVIDE(
+            (new_cust_hs_weighted + renewal_hs_weighted + land_exp_hs_weighted),
+            (new_cust_quarterly_quota + renewal_quarterly_quota + land_exp_quarterly_quota)
+        ) as coverage_ratio
+    FROM `{PROJECT_ID}.{DATASET}.pipeline_coverage_by_company`
+    WHERE quarter = '{quarter}'
+    ORDER BY coverage_gap DESC
+    """
+
+    try:
+        client = get_client()
+        results = list(client.query(query).result())
+        return [dict(row) for row in results]
+    except GoogleCloudError as e:
+        logger.error("Failed to fetch pipeline coverage by company: %s", e)
+        return []
+
+
 def get_company_metrics(fiscal_year: int = FISCAL_YEAR) -> Dict[str, Any]:
     """Fetch all company-level metrics.
 

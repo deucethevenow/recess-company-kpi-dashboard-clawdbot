@@ -194,12 +194,14 @@ def _fetch_bigquery_metrics() -> Optional[Dict[str, Any]]:
     global _bq_cache
     current_time = time.time()
 
-    # Return cached data if still fresh
-    if _bq_cache["data"] is not None and (current_time - _bq_cache["timestamp"]) < _BQ_CACHE_TTL:
+    # Return cached result if still fresh (includes cached failures)
+    if _bq_cache["timestamp"] > 0 and (current_time - _bq_cache["timestamp"]) < _BQ_CACHE_TTL:
         cache_age = int(current_time - _bq_cache["timestamp"])
-        logger.debug("Using cached BigQuery data (%ds old)", cache_age)
-        # Still mark as live since we have valid BigQuery data
-        _set_data_source(True, "bigquery (cached)")
+        if _bq_cache["data"] is not None:
+            logger.debug("Using cached BigQuery data (%ds old)", cache_age)
+            _set_data_source(True, "bigquery (cached)")
+        else:
+            logger.debug("Using cached BQ failure (%ds old)", cache_age)
         return _bq_cache["data"]
 
     # Not cached or expired - fetch fresh data
@@ -226,10 +228,16 @@ def _fetch_bigquery_metrics() -> Optional[Dict[str, Any]]:
             _set_data_source(True, "bigquery")
             return _bq_cache["data"]
 
+        # BQ returned empty results — cache as failure
+        _bq_cache["data"] = None
+        _bq_cache["timestamp"] = current_time
         return None
     except Exception as e:
         logger.warning("❌ BigQuery query failed: %s", e)
         _set_data_source(False, "mock", str(e))
+        # Cache the failure to avoid retrying on every access
+        _bq_cache["data"] = None
+        _bq_cache["timestamp"] = current_time
         return None
 
 
@@ -492,39 +500,56 @@ def get_status_color(
 # Base person data (actuals + default targets - NO function calls here)
 _PERSON_BASE_DATA = [
     {"name": "Jack", "department": "CEO / Biz Dev", "metric_name": "Revenue vs Target",
-     "actual": 7_930_000, "default_target": 10_000_000, "format": "currency", "higher_is_better": True},
+     "actual": 7_930_000, "default_target": 10_000_000, "format": "currency", "higher_is_better": True,
+     "ref_2025": 3_910_000},
     {"name": "Deuce", "department": "COO / Ops", "metric_name": "Take Rate %",
-     "actual": 0.49, "default_target": 0.50, "format": "percent", "higher_is_better": True},
+     "actual": 0.49, "default_target": 0.50, "format": "percent", "higher_is_better": True,
+     "ref_2025": 0.49},
     {"name": "Ian Hong", "department": "Supply", "metric_name": "New Unique Inventory",
-     "actual": 12, "default_target": 16, "format": "number", "higher_is_better": True},
+     "actual": 12, "default_target": 16, "format": "number", "higher_is_better": True,
+     "ref_2025": 10},
     {"name": "Ashton", "department": "Supply AM", "metric_name": "NRR Top Supply Users",
-     "actual": 0.95, "default_target": 1.10, "format": "percent", "higher_is_better": True},
+     "actual": 0.95, "default_target": 1.10, "format": "percent", "higher_is_better": True,
+     "ref_2025": 0.67},
     {"name": "Andy Cooper", "department": "Demand Sales", "metric_name": "NRR",
-     "actual": 1.07, "default_target": 1.10, "format": "percent", "higher_is_better": True},
+     "actual": 1.07, "default_target": 1.10, "format": "percent", "higher_is_better": True,
+     "ref_2025": 0.22},
     {"name": "Danny Sears", "department": "Demand Sales", "metric_name": "Pipeline Coverage",
-     "actual": 2.8, "default_target": 3.0, "format": "multiplier", "higher_is_better": True},
+     "actual": 2.8, "default_target": 3.0, "format": "multiplier", "higher_is_better": True,
+     "ref_2025": 2.5},
     {"name": "Katie", "department": "Demand Sales", "metric_name": "Pipeline Coverage",
-     "actual": 3.2, "default_target": 3.0, "format": "multiplier", "higher_is_better": True},
+     "actual": 3.2, "default_target": 3.0, "format": "multiplier", "higher_is_better": True,
+     "ref_2025": 2.9},
     {"name": "Char Short", "department": "Demand AM", "metric_name": "Contract Spend %",
-     "actual": 0.89, "default_target": 0.95, "format": "percent", "higher_is_better": True},
+     "actual": 0.89, "default_target": 0.95, "format": "percent", "higher_is_better": True,
+     "ref_2025": 0.82},
     {"name": "Victoria", "department": "Demand AM", "metric_name": "Days to Fulfill",
-     "actual": 69, "default_target": 60, "format": "days", "higher_is_better": False},
+     "actual": 69, "default_target": 60, "format": "days", "higher_is_better": False,
+     "ref_2025": 69},
     {"name": "Claire", "department": "Demand AM", "metric_name": "NPS Score",
-     "actual": 0.71, "default_target": 0.75, "format": "percent", "higher_is_better": True},
+     "actual": 0.71, "default_target": 0.75, "format": "percent", "higher_is_better": True,
+     "ref_2025": 0.68},
     {"name": "Francisco", "department": "Demand AM", "metric_name": "Offer Acceptance %",
-     "actual": 0.88, "default_target": 0.90, "format": "percent", "higher_is_better": True},
+     "actual": 0.88, "default_target": 0.90, "format": "percent", "higher_is_better": True,
+     "ref_2025": 0.85},
     {"name": "Marketing", "department": "Marketing", "metric_name": "Mktg-Influenced Pipeline",
-     "actual": 2_400_000, "default_target": 0, "format": "currency", "higher_is_better": True},
+     "actual": 2_400_000, "default_target": 0, "format": "currency", "higher_is_better": True,
+     "ref_2025": 1_800_000},
     {"name": "Accounting", "department": "Accounting", "metric_name": "Invoice Collection %",
-     "actual": 0.93, "default_target": 0.95, "format": "percent", "higher_is_better": True},
+     "actual": 0.93, "default_target": 0.95, "format": "percent", "higher_is_better": True,
+     "ref_2025": 0.91},
     {"name": "VP Engineering", "department": "Engineering", "metric_name": "Features Fully Scoped",
-     "actual": None, "default_target": 5, "format": "number", "higher_is_better": True},
+     "actual": None, "default_target": 5, "format": "number", "higher_is_better": True,
+     "ref_2025": 4},
     {"name": "Dev 1", "department": "Engineering", "metric_name": "BizSup Completed",
-     "actual": None, "default_target": 10, "format": "number", "higher_is_better": True},
+     "actual": None, "default_target": 10, "format": "number", "higher_is_better": True,
+     "ref_2025": 8},
     {"name": "Dev 2", "department": "Engineering", "metric_name": "PRDs Generated",
-     "actual": None, "default_target": 3, "format": "number", "higher_is_better": True},
+     "actual": None, "default_target": 3, "format": "number", "higher_is_better": True,
+     "ref_2025": 2},
     {"name": "Dev 3", "department": "Engineering", "metric_name": "FSDs Generated",
-     "actual": None, "default_target": 2, "format": "number", "higher_is_better": True},
+     "actual": None, "default_target": 2, "format": "number", "higher_is_better": True,
+     "ref_2025": 1},
 ]
 
 
@@ -548,6 +573,7 @@ def get_person_metrics() -> List[Dict[str, Any]]:
             "actual": person["actual"],
             "format": person["format"],
             "higher_is_better": person.get("higher_is_better", True),
+            "ref_2025": person.get("ref_2025"),
         }
         # Get fresh target from JSON, fallback to default
         entry["target"] = _get_person_target(person["name"], person["default_target"])
@@ -1122,12 +1148,14 @@ def format_value(value: Optional[float], fmt: str) -> str:
         return "—"
 
     if fmt == "currency":
-        if value >= 1_000_000:
-            return f"${value/1_000_000:.2f}M"
-        elif value >= 1_000:
-            return f"${value/1_000:.0f}K"
+        sign = "-" if value < 0 else ""
+        abs_val = abs(value)
+        if abs_val >= 1_000_000:
+            return f"{sign}${abs_val/1_000_000:.2f}M"
+        elif abs_val >= 1_000:
+            return f"{sign}${abs_val/1_000:.0f}K"
         else:
-            return f"${value:.0f}"
+            return f"{sign}${abs_val:.0f}"
     elif fmt == "percent":
         return f"{value*100:.0f}%"
     elif fmt == "multiplier":
@@ -1229,7 +1257,9 @@ def get_yoy_metrics() -> Dict[str, Any]:
     prior_customer_count = None
     prior_logo_retention = None
 
-    if USE_BIGQUERY and _bigquery_available:
+    # Only try BQ if the main data source is live (avoids hanging on failed connections)
+    source = get_data_source_status()
+    if source.get("is_live") and USE_BIGQUERY and _bigquery_available:
         try:
             prior_revenue = bq.get_revenue_ytd(PRIOR_FISCAL_YEAR)
             prior_take_rate = bq.get_take_rate(PRIOR_FISCAL_YEAR)
@@ -1327,7 +1357,8 @@ def get_quarterly_revenue() -> List[Dict[str, Any]]:
         # Actual revenue for this quarter (would need quarterly BQ query)
         # For now, use YTD for current quarter, None for future
         actual = None
-        if status == "current" and USE_BIGQUERY and _bigquery_available:
+        source = get_data_source_status()
+        if status == "current" and source.get("is_live") and USE_BIGQUERY and _bigquery_available:
             try:
                 actual = bq.get_revenue_ytd(FISCAL_YEAR)
             except Exception:
@@ -1375,7 +1406,8 @@ def get_revenue_time_horizons() -> Dict[str, Dict[str, Any]]:
     prior_quarter = 2_400_000  # 2025 Q1
     prior_month = 237_000  # 2025 same month
 
-    if USE_BIGQUERY and _bigquery_available:
+    source = get_data_source_status()
+    if source.get("is_live") and USE_BIGQUERY and _bigquery_available:
         try:
             prior_ytd_bq = bq.get_revenue_ytd(FISCAL_YEAR - 1)
             if prior_ytd_bq is not None:

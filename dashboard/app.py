@@ -10,6 +10,7 @@ from datetime import datetime
 from typing import Optional, Tuple
 
 import streamlit as st
+import streamlit.components.v1 as st_components
 import plotly.graph_objects as go
 
 # Configure logging
@@ -70,7 +71,7 @@ st.set_page_config(
     page_title="Recess — KPI Dashboard",
     page_icon="⚡",
     layout="wide",
-    initial_sidebar_state="expanded",  # Must be expanded - collapsed causes rerun issues
+    initial_sidebar_state="collapsed",  # Start collapsed; hamburger button to expand
 )
 
 def get_status_info(
@@ -608,6 +609,25 @@ st.markdown("""
     /* ===========================================
        Metric Cards
        =========================================== */
+    /* Equal-height cards: propagate stretch through Streamlit wrappers (desktop only) */
+    @media screen and (min-width: 768px) {
+        div[data-testid="stHorizontalBlock"] {
+            align-items: stretch;
+        }
+        div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] {
+            display: flex;
+            flex-direction: column;
+        }
+        div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] > div {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] > div > div > div {
+            flex: 1;
+        }
+    }
+
     .metric-card {
         background: var(--bg-white);
         border: 1px solid var(--border-light);
@@ -617,6 +637,8 @@ st.markdown("""
         transition: all 0.2s ease;
         height: 100%;
         position: relative;
+        display: flex;
+        flex-direction: column;
     }
 
     .metric-card:hover {
@@ -669,6 +691,7 @@ st.markdown("""
         color: var(--recess-charcoal);
         line-height: 1.1;
         margin-bottom: 0.5rem;
+        flex-grow: 1;
     }
 
     .metric-card-delta {
@@ -1208,10 +1231,7 @@ st.markdown("""
             display: none !important;
         }
 
-        [data-testid="stSidebarCollapseButton"] {
-            display: none !important;
-        }
-
+        /* Hamburger button — shows when sidebar is collapsed */
         [data-testid="stSidebarCollapsedControl"] {
             position: fixed;
             top: 0.5rem;
@@ -1236,6 +1256,34 @@ st.markdown("""
 
         [data-testid="stSidebarCollapsedControl"] span {
             display: none !important;
+        }
+
+        /* Close button inside open sidebar — style as X button */
+        [data-testid="stSidebarCollapseButton"] {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            z-index: 999999;
+        }
+
+        [data-testid="stSidebarCollapseButton"] button {
+            background: var(--recess-aqua) !important;
+            color: white !important;
+            border: none !important;
+            border-radius: var(--radius-sm) !important;
+            padding: 0.375rem !important;
+            min-height: 36px !important;
+            min-width: 36px !important;
+        }
+
+        [data-testid="stSidebarCollapseButton"] svg {
+            fill: white !important;
+            stroke: white !important;
+        }
+
+        /* Sidebar overlay styling on mobile */
+        [data-testid="stSidebar"] {
+            z-index: 999998;
         }
 
         .mobile-header {
@@ -1435,6 +1483,16 @@ st.markdown("""
             transition: none;
         }
     }
+
+    /* Mobile hamburger: hide on desktop, ensure sidebar visible */
+    @media screen and (min-width: 768px) {
+        #mh-btn, #mh-backdrop {
+            display: none !important;
+        }
+        [data-testid="stSidebar"] {
+            transform: none !important;
+        }
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -1443,12 +1501,7 @@ def render_sidebar():
     """Render the sidebar navigation."""
     with st.sidebar:
         # Logo
-        st.markdown('''
-        <div class="sidebar-logo">
-            <h1>⚡ Recess</h1>
-            <span>KPI Dashboard</span>
-        </div>
-        ''', unsafe_allow_html=True)
+        st.markdown('<div class="sidebar-logo"><h1>⚡ Recess</h1><span>KPI Dashboard</span></div>', unsafe_allow_html=True)
 
         # Navigation
         st.markdown('<div class="nav-section">Dashboard</div>', unsafe_allow_html=True)
@@ -1493,18 +1546,19 @@ def render_page_header(title, subtitle=""):
     badge_class = "live" if source.get("is_live") else "mock"
     badge_text = "Live" if source.get("is_live") else "Mock Data"
 
-    st.markdown(f'''
-    <div class="page-header">
-        <div>
-            <h1 class="page-title">{title}</h1>
-            <p class="page-subtitle">{subtitle}</p>
-        </div>
-        <div class="page-meta">
-            <div class="page-date">{datetime.now().strftime("%B %d, %Y")}</div>
-            <div class="live-badge {badge_class}">{badge_text}</div>
-        </div>
-    </div>
-    ''', unsafe_allow_html=True)
+    header_html = (
+        f'<div class="page-header">'
+        f'<div>'
+        f'<h1 class="page-title">{html.escape(title)}</h1>'
+        f'<p class="page-subtitle">{html.escape(subtitle)}</p>'
+        f'</div>'
+        f'<div class="page-meta">'
+        f'<div class="page-date">{datetime.now().strftime("%B %d, %Y")}</div>'
+        f'<div class="live-badge {badge_class}">{badge_text}</div>'
+        f'</div>'
+        f'</div>'
+    )
+    st.markdown(header_html, unsafe_allow_html=True)
 
 
 def render_revenue_overview():
@@ -1519,58 +1573,43 @@ def render_revenue_overview():
         target = horizon["target"] or 1
         prior = horizon["prior_year"]
         change = horizon["change_pct"]
-        progress = min((actual / target) * 100, 100) if target else 0
+        progress = max(0, min((actual / target) * 100, 100)) if target else 0
 
-        # Format values
-        if actual >= 1_000_000:
-            actual_str = f"${actual/1_000_000:.2f}M"
-        elif actual >= 1_000:
-            actual_str = f"${actual/1_000:.1f}K"
-        else:
-            actual_str = f"${actual:,.0f}"
-
-        if target >= 1_000_000:
-            target_str = f"${target/1_000_000:.1f}M"
-        elif target >= 1_000:
-            target_str = f"${target/1_000:.0f}K"
-        else:
-            target_str = f"${target:,.0f}"
+        # Format values using format_value (handles negatives)
+        actual_str = format_value(actual, "currency")
+        target_str = format_value(target, "currency")
 
         # YoY arrow
         yoy_html = ""
         if change is not None and prior is not None:
             arrow_class = "up" if change >= 0 else "down"
             arrow_char = "\u2191" if change >= 0 else "\u2193"
-            if prior >= 1_000_000:
-                prior_str = f"${prior/1_000_000:.1f}M"
-            elif prior >= 1_000:
-                prior_str = f"${prior/1_000:.0f}K"
-            else:
-                prior_str = f"${prior:,.0f}"
-            yoy_html = f'''
-            <div class="revenue-horizon-yoy {arrow_class}">
-                {arrow_char} {abs(change)*100:.1f}% vs 2025
-            </div>
-            <div class="revenue-horizon-prior">{prior_str} last year</div>
-            '''
+            prior_str = format_value(prior, "currency")
+            yoy_html = (
+                f'<div class="revenue-horizon-yoy {arrow_class}">'
+                f'{arrow_char} {abs(change)*100:.1f}% vs 2025'
+                f'</div>'
+                f'<div class="revenue-horizon-prior">{prior_str} last year</div>'
+            )
 
         current_class = " current" if key == "quarter" else ""
 
         with cols[i]:
-            st.markdown(f'''
-            <div class="revenue-horizon-card{current_class}">
-                <div class="revenue-horizon-label">{horizon["label"]}</div>
-                <div class="revenue-horizon-value">{actual_str}</div>
-                <div class="revenue-horizon-target">
-                    Target: {target_str}
-                    <div class="progress-bar">
-                        <div class="progress-bar-fill" style="width: {progress:.0f}%"></div>
-                    </div>
-                    <span class="progress-pct">{progress:.1f}%</span>
-                </div>
-                {yoy_html}
-            </div>
-            ''', unsafe_allow_html=True)
+            card_html = (
+                f'<div class="revenue-horizon-card{current_class}">'
+                f'<div class="revenue-horizon-label">{horizon["label"]}</div>'
+                f'<div class="revenue-horizon-value">{actual_str}</div>'
+                f'<div class="revenue-horizon-target">'
+                f'Target: {target_str}'
+                f'<div class="progress-bar">'
+                f'<div class="progress-bar-fill" style="width: {progress:.0f}%"></div>'
+                f'</div>'
+                f'<span class="progress-pct">{progress:.1f}%</span>'
+                f'</div>'
+                f'{yoy_html}'
+                f'</div>'
+            )
+            st.markdown(card_html, unsafe_allow_html=True)
 
     # --- Quarterly Breakdown (4 compact cards) ---
     st.markdown('<div style="height: 0.75rem;"></div>', unsafe_allow_html=True)
@@ -1582,38 +1621,29 @@ def render_revenue_overview():
         status = q["status"]
 
         if actual is not None and target > 0:
-            progress = min((actual / target) * 100, 100)
-            if actual >= 1_000_000:
-                actual_str = f"${actual/1_000_000:.2f}M"
-            elif actual >= 1_000:
-                actual_str = f"${actual/1_000:.1f}K"
-            else:
-                actual_str = f"${actual:,.0f}"
+            progress = max(0, min((actual / target) * 100, 100))
+            actual_str = format_value(actual, "currency")
         else:
             progress = 0
             actual_str = "\u2014"
 
-        if target >= 1_000_000:
-            target_str = f"${target/1_000_000:.1f}M"
-        elif target >= 1_000:
-            target_str = f"${target/1_000:.0f}K"
-        else:
-            target_str = f"${target:,.0f}"
+        target_str = format_value(target, "currency") if target else "\u2014"
 
         current_class = " current" if is_current else ""
         muted_class = " muted" if status == "future" else ""
 
         with q_cols[i]:
-            st.markdown(f'''
-            <div class="quarter-card{current_class}{muted_class}">
-                <div class="quarter-label">{q["quarter"]}-26</div>
-                <div class="quarter-actual">{actual_str}</div>
-                <div class="quarter-target">/ {target_str}</div>
-                <div class="progress-bar">
-                    <div class="progress-bar-fill" style="width: {progress:.0f}%"></div>
-                </div>
-            </div>
-            ''', unsafe_allow_html=True)
+            card_html = (
+                f'<div class="quarter-card{current_class}{muted_class}">'
+                f'<div class="quarter-label">{q["quarter"]}-26</div>'
+                f'<div class="quarter-actual">{actual_str}</div>'
+                f'<div class="quarter-target">/ {target_str}</div>'
+                f'<div class="progress-bar">'
+                f'<div class="progress-bar-fill" style="width: {progress:.0f}%"></div>'
+                f'</div>'
+                f'</div>'
+            )
+            st.markdown(card_html, unsafe_allow_html=True)
 
 
 def render_health_metrics():
@@ -1710,11 +1740,11 @@ def render_health_metrics():
         else:
             status_class, status_label = get_status_info(val, tgt, higher_is_better)
 
-        # Target context
+        # Target context (HTML-escape to prevent < > from breaking markup)
         target_info = get_metric_target(m["key"])
         target_line = ""
         if target_info:
-            target_line = f'Target: {target_info["display"]}'
+            target_line = f'Target: {html.escape(target_info["display"])}'
 
         # YoY arrow
         yoy_html = ""
@@ -1724,22 +1754,17 @@ def render_health_metrics():
             arrow_class = "up" if change >= 0 else "down"
             arrow_char = "\u2191" if change >= 0 else "\u2193"
             prior_str = format_value(prior, fmt) if prior is not None else "\u2014"
-            yoy_html = f'''
-            <div class="yoy-arrow {arrow_class}">
-                {arrow_char} {abs(change)*100:.1f}% vs 2025 &middot; {prior_str}
-            </div>
-            '''
+            yoy_html = f'<div class="yoy-arrow {arrow_class}">{arrow_char} {abs(change)*100:.1f}% vs 2025 &middot; {prior_str}</div>'
 
         with col:
-            st.markdown(f'''
-            <div class="metric-card">
-                <div class="metric-card-label">{m["label"]}</div>
-                <div class="metric-card-value">{val_str}</div>
-                <span class="status-badge {status_class}">{status_label}</span>
-                {yoy_html}
-                <div class="metric-card-context">{target_line}</div>
-            </div>
-            ''', unsafe_allow_html=True)
+            card_html = f'''<div class="metric-card">
+<div class="metric-card-label">{html.escape(m["label"])}</div>
+<div class="metric-card-value">{val_str}</div>
+<span class="status-badge {status_class}">{status_label}</span>
+{yoy_html}
+<div class="metric-card-context">{target_line}</div>
+</div>'''
+            st.markdown(card_html, unsafe_allow_html=True)
 
     # Render Row 1
     cols = st.columns(4)
@@ -1812,18 +1837,19 @@ def render_metric_card_generic(metric: dict, col):
             sub_label = f'<div style="font-size: 11px; color: #64748b; margin-top: 4px; line-height: 1.6;">{inner}</div>'
 
     with col:
-        st.markdown(f'''
-        <div class="metric-card">
-            <div class="metric-card-header">
-                <div class="metric-card-label">{label}<span class="info-trigger">i{tooltip_html}</span></div>
-                <div class="metric-card-icon {icon_class}">{icon}</div>
-            </div>
-            <div class="metric-card-kicker">Current YTD</div>
-            <div class="metric-card-value">{value_str}</div>
-            <span class="status-badge {status_class}">{status_label}</span>
-            {sub_label}
-        </div>
-        ''', unsafe_allow_html=True)
+        card_html = (
+            f'<div class="metric-card">'
+            f'<div class="metric-card-header">'
+            f'<div class="metric-card-label">{html.escape(label)}<span class="info-trigger">i{tooltip_html}</span></div>'
+            f'<div class="metric-card-icon {icon_class}">{icon}</div>'
+            f'</div>'
+            f'<div class="metric-card-kicker">Current YTD</div>'
+            f'<div class="metric-card-value">{value_str}</div>'
+            f'<span class="status-badge {status_class}">{status_label}</span>'
+            f'{sub_label}'
+            f'</div>'
+        )
+        st.markdown(card_html, unsafe_allow_html=True)
 
 
 def render_metric_grid(metrics: list, columns: int = 4):
@@ -1834,45 +1860,54 @@ def render_metric_grid(metrics: list, columns: int = 4):
 
 
 def render_team_scorecard():
-    """Render team scorecard in Recess table style."""
+    """Render team scorecard as metric cards matching Company Health style."""
     st.markdown('<div class="section-header">Team Accountability</div>', unsafe_allow_html=True)
 
-    st.markdown('''
-    <div class="team-table">
-        <div class="team-table-header">
-            <div>Team Member</div>
-            <div>Primary Metric</div>
-            <div>Actual</div>
-            <div>Target</div>
-            <div>Status</div>
-        </div>
-    ''', unsafe_allow_html=True)
+    people = list(PERSON_METRICS)
+    row_size = 4
 
-    rows_html = ""
-    for person in PERSON_METRICS:
-        actual = person["actual"]
-        target = person["target"]
-        fmt = person["format"]
-        higher_is_better = person.get("higher_is_better", True)
+    for row_start in range(0, len(people), row_size):
+        row_people = people[row_start:row_start + row_size]
+        cols = st.columns(row_size)
 
-        actual_str = format_value(actual, fmt) if actual is not None else "\u2014"
-        target_str = format_value(target, fmt) if target else "\u2014"
-        status_class, status_label = get_status_info(actual, target, higher_is_better)
+        for i, person in enumerate(row_people):
+            actual = person["actual"]
+            target = person["target"]
+            fmt = person["format"]
+            higher_is_better = person.get("higher_is_better", True)
+            ref_2025 = person.get("ref_2025")
 
-        rows_html += f'''
-        <div class="team-row">
-            <div>
-                <div class="team-name">{safe_html(person["name"])}</div>
-                <div class="team-dept">{safe_html(person["department"])}</div>
-            </div>
-            <div class="team-metric">{safe_html(person["metric_name"])}</div>
-            <div class="team-value">{actual_str}</div>
-            <div class="team-target">{target_str}</div>
-            <div><span class="status-badge {status_class}">{status_label}</span></div>
-        </div>
-        '''
+            actual_str = format_value(actual, fmt) if actual is not None else "\u2014"
+            ref_2025_str = format_value(ref_2025, fmt) if ref_2025 is not None else None
+            status_class, status_label = get_status_info(actual, target, higher_is_better)
 
-    st.markdown(rows_html + '</div>', unsafe_allow_html=True)
+            # Build context line: Target + 2025 reference
+            context_parts = []
+            if target:
+                target_str = format_value(target, fmt)
+                context_parts.append(f"Target: {html.escape(target_str)}")
+            if ref_2025_str:
+                context_parts.append(f"2025: {html.escape(ref_2025_str)}")
+
+            context_line = " &middot; ".join(context_parts) if context_parts else ""
+
+            card_html = (
+                f'<div class="metric-card">'
+                f'<div class="metric-card-label">{html.escape(person["name"])}</div>'
+                f'<div style="font-size:11px;color:var(--recess-slate);margin-bottom:6px;">'
+                f'{html.escape(person["department"])} &middot; {html.escape(person["metric_name"])}'
+                f'</div>'
+                f'<div class="metric-card-value">{actual_str}</div>'
+                f'<span class="status-badge {status_class}">{status_label}</span>'
+                f'<div class="metric-card-context">{context_line}</div>'
+                f'</div>'
+            )
+            with cols[i]:
+                st.markdown(card_html, unsafe_allow_html=True)
+
+        # Spacer between rows
+        if row_start + row_size < len(people):
+            st.markdown('<div style="height: 0.5rem;"></div>', unsafe_allow_html=True)
 
 
 def render_department_detail(dept_name):
@@ -2291,6 +2326,260 @@ def render_demand_sales_dashboard():
         '''
 
     st.markdown(rows_html + '</div>', unsafe_allow_html=True)
+
+    # -------------------------------------------------------------------------
+    # Pipeline Coverage Gap (from deployed BigQuery view)
+    # -------------------------------------------------------------------------
+    from data.bigquery_client import get_pipeline_coverage_by_company
+
+    st.markdown('<div class="section-header">Pipeline Coverage Gap</div>', unsafe_allow_html=True)
+
+    # Quarter selector
+    current_month = datetime.now().month
+    current_quarter_idx = (current_month - 1) // 3
+    quarters = ["Q1", "Q2", "Q3", "Q4"]
+    selected_quarter = st.selectbox(
+        "Quarter",
+        quarters,
+        index=current_quarter_idx,
+        key="coverage_gap_quarter",
+    )
+
+    coverage_data = get_pipeline_coverage_by_company(quarter=selected_quarter)
+
+    if coverage_data:
+        # Compute summary totals
+        total_quota = sum(row.get("total_quarterly_quota", 0) or 0 for row in coverage_data)
+        total_pipeline = sum(row.get("total_hs_weighted", 0) or 0 for row in coverage_data)
+        total_gap = total_quota - total_pipeline
+        overall_ratio = total_pipeline / total_quota if total_quota else 0
+
+        # Summary metric cards
+        cols = st.columns(4)
+        summary_items = [
+            ("Total Quota", format_value(total_quota, "currency")),
+            ("Total Pipeline (Weighted)", format_value(total_pipeline, "currency")),
+            ("Total Gap", format_value(total_gap, "currency")),
+            ("Coverage Ratio", format_value(overall_ratio, "multiplier")),
+        ]
+        for col, (label, value) in zip(cols, summary_items):
+            with col:
+                st.markdown(f'''
+                <div class="metric-card">
+                    <div class="metric-card-header">
+                        <div class="metric-card-label">{label}</div>
+                    </div>
+                    <div class="metric-card-value">{value}</div>
+                </div>
+                ''', unsafe_allow_html=True)
+
+        # Diverging bar chart — Top 15 companies by gap
+        top_15 = coverage_data[:15]
+        # Reverse for Plotly (bottom-to-top rendering)
+        top_15_rev = list(reversed(top_15))
+        company_names = [row.get("company_name", "Unknown") for row in top_15_rev]
+        gap_amounts = [-(row.get("coverage_gap", 0) or 0) for row in top_15_rev]
+        pipeline_amounts = [row.get("total_hs_weighted", 0) or 0 for row in top_15_rev]
+
+        fig = go.Figure()
+        fig.add_trace(go.Bar(
+            y=company_names,
+            x=gap_amounts,
+            name="Gap (Uncovered)",
+            orientation="h",
+            marker_color="#ef4444",
+            hovertemplate="<b>%{y}</b><br>Gap: $%{customdata:,.0f}<extra></extra>",
+            customdata=[abs(g) for g in gap_amounts],
+        ))
+        fig.add_trace(go.Bar(
+            y=company_names,
+            x=pipeline_amounts,
+            name="Pipeline (HS Weighted)",
+            orientation="h",
+            marker_color="#13bad5",
+            hovertemplate="<b>%{y}</b><br>Pipeline: $%{x:,.0f}<extra></extra>",
+        ))
+        fig.update_layout(
+            title=dict(
+                text=f"Top 15 Coverage Gaps — {selected_quarter} FY{FISCAL_YEAR}",
+                font=dict(size=14, color="#1a1a2e", family="Inter, sans-serif"),
+                x=0,
+            ),
+            template="plotly_white",
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="#64748b", family="Inter, sans-serif", size=12),
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1,
+            ),
+            barmode="relative",
+            margin=dict(l=0, r=20, t=40, b=0),
+            xaxis=dict(
+                title="Dollars ($)",
+                gridcolor="#e2e8f0",
+                zerolinecolor="#94a3b8",
+                zerolinewidth=2,
+                tickformat="$,.0s",
+            ),
+            yaxis=dict(
+                gridcolor="#e2e8f0",
+                automargin=True,
+            ),
+            height=max(400, len(top_15) * 32 + 80),
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+        # Company Detail — full sortable table
+        st.markdown('<div class="section-header">Company Detail</div>', unsafe_allow_html=True)
+
+        st.markdown('''
+        <style>
+        .coverage-table {
+            background: var(--bg-white);
+            border: 1px solid var(--border-light);
+            border-radius: var(--radius-md);
+            overflow: hidden;
+            box-shadow: var(--shadow-sm);
+        }
+        .coverage-header {
+            background: var(--recess-slate);
+            padding: 0.75rem 1.25rem;
+            display: grid;
+            grid-template-columns: 2fr 1.2fr 1fr 1fr 1fr 1.5fr 0.8fr;
+            gap: 0.75rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--recess-white);
+            border-bottom: 1px solid var(--border-light);
+        }
+        .coverage-row {
+            display: grid;
+            grid-template-columns: 2fr 1.2fr 1fr 1fr 1fr 1.5fr 0.8fr;
+            gap: 0.75rem;
+            padding: 0.75rem 1.25rem;
+            border-bottom: 1px solid var(--border-light);
+            align-items: center;
+            font-size: 0.875rem;
+            transition: background 0.15s ease;
+        }
+        .coverage-row:last-child { border-bottom: none; }
+        .coverage-row:hover { background: var(--bg-main); }
+        .coverage-company {
+            font-weight: 600;
+            color: var(--text-primary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .coverage-owner {
+            color: var(--text-muted);
+            font-size: 0.8125rem;
+        }
+        .coverage-value {
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 0.8125rem;
+            color: var(--text-secondary);
+            text-align: right;
+        }
+        .coverage-bar-wrap {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .coverage-bar-bg {
+            flex: 1;
+            height: 6px;
+            background: var(--border-light);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .coverage-bar-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.3s ease;
+        }
+        .coverage-bar-fill.danger { background: var(--recess-danger); }
+        .coverage-bar-fill.warning { background: var(--recess-burnt-orange); }
+        .coverage-bar-fill.success { background: var(--recess-aqua); }
+        .coverage-ratio-label {
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 0.75rem;
+            min-width: 3rem;
+            text-align: right;
+        }
+        </style>
+        ''', unsafe_allow_html=True)
+
+        q_label = html.escape(selected_quarter)
+        table_html = f'''
+        <div class="coverage-table">
+            <div class="coverage-header">
+                <div>Company</div>
+                <div>Owner</div>
+                <div style="text-align:right">{q_label} Quota</div>
+                <div style="text-align:right">Pipeline (Wtd)</div>
+                <div style="text-align:right">Gap</div>
+                <div>Coverage</div>
+                <div>Status</div>
+            </div>
+        '''
+
+        for row in coverage_data:
+            company = html.escape(row.get("company_name", "Unknown"))
+            owner = html.escape(row.get("owner_name", "Unassigned"))
+            quota = row.get("total_quarterly_quota", 0) or 0
+            pipeline_val = row.get("total_hs_weighted", 0) or 0
+            gap = row.get("coverage_gap", 0) or 0
+            ratio = row.get("coverage_ratio", 0) or 0
+
+            quota_str = format_value(quota, "currency")
+            pipeline_str = format_value(pipeline_val, "currency")
+            gap_str = format_value(gap, "currency")
+            ratio_str = f"{ratio:.1f}x"
+
+            # Color thresholds: red < 1x, amber 1-3x, green > 3x
+            if ratio < 1:
+                bar_class = "danger"
+                status_class = "danger"
+                status_label = "At Risk"
+            elif ratio < 3:
+                bar_class = "warning"
+                status_class = "warning"
+                status_label = "Building"
+            else:
+                bar_class = "success"
+                status_class = "success"
+                status_label = "Healthy"
+
+            bar_pct = min(ratio / 3 * 100, 100)  # 3x = full bar
+
+            table_html += f'''
+            <div class="coverage-row">
+                <div class="coverage-company">{company}</div>
+                <div class="coverage-owner">{owner}</div>
+                <div class="coverage-value">{quota_str}</div>
+                <div class="coverage-value">{pipeline_str}</div>
+                <div class="coverage-value">{gap_str}</div>
+                <div class="coverage-bar-wrap">
+                    <div class="coverage-bar-bg">
+                        <div class="coverage-bar-fill {bar_class}" style="width: {bar_pct:.0f}%"></div>
+                    </div>
+                    <span class="coverage-ratio-label">{ratio_str}</span>
+                </div>
+                <div><span class="status-badge {status_class}">{status_label}</span></div>
+            </div>
+            '''
+
+        table_html += '</div>'
+        st.markdown(table_html, unsafe_allow_html=True)
+    else:
+        st.info(f"No pipeline coverage data available for {selected_quarter}.")
 
 
 def render_accounting_dashboard():
@@ -3507,6 +3796,43 @@ def render_settings_page():
 def main():
     """Main app."""
     render_sidebar()
+
+    # Mobile sidebar: hide sidebar + show hamburger via DOM manipulation
+    st_components.html("""
+    <script>
+    (function() {
+        var p = window.parent, doc = p.document;
+        if (p.innerWidth > 767) return;
+        var sb = doc.querySelector('[data-testid="stSidebar"]');
+        if (!sb || doc.getElementById('mh-btn')) return;
+        // Hide sidebar off-screen
+        sb.style.cssText += ';transform:translateX(-100%)!important;transition:transform 0.3s ease!important;z-index:999998!important;';
+        // Hide native collapse button
+        var cb = sb.querySelector('[data-testid="stSidebarCollapseButton"]');
+        if (cb) cb.style.display = 'none';
+        // Create hamburger
+        var btn = doc.createElement('button');
+        btn.id = 'mh-btn';
+        btn.innerHTML = '&#9776;';
+        btn.style.cssText = 'position:fixed;top:0.5rem;left:0.5rem;z-index:999999;background:#14B9D6;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:22px;line-height:1;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.15);';
+        doc.body.appendChild(btn);
+        // Backdrop
+        var bd = doc.createElement('div');
+        bd.id = 'mh-backdrop';
+        bd.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,0.3);z-index:999997;';
+        doc.body.appendChild(bd);
+        var open = false;
+        function toggle() {
+            open = !open;
+            sb.style.transform = open ? 'translateX(0)' : 'translateX(-100%)';
+            bd.style.display = open ? 'block' : 'none';
+            btn.innerHTML = open ? '&#10005;' : '&#9776;';
+        }
+        btn.addEventListener('click', toggle);
+        bd.addEventListener('click', toggle);
+    })();
+    </script>
+    """, height=0)
 
     # Mobile header (hidden on desktop via CSS)
     render_mobile_header()
